@@ -48,7 +48,7 @@ initialmodel = opt.model_type()
 initial_params = pm.Parameters()
 initial_params.setByDict(initialmodel.state_dict())
 
-server = ps.parameterServer(initial_params.paramTensor, opt.n_chunks)
+server = ps.parameterServer(initial_params.paramTensor, opt.n_chunks, opt.p_level)
 
 clients = []
 test_acc_log = []
