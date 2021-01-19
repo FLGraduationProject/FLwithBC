@@ -11,7 +11,7 @@ class parameterServer():
     def __init__(self, paramTensor, n_chunks, p_level):
         self.chunks = []
         for i in range(n_chunks):
-          self.chunks.append paramTensor[int(i/n_chunks*len(paramTensor))) : int((i+1)/n_chunks*len(paramTensor)))])
+          self.chunks.append(paramTensor[int(i/n_chunks*len(paramTensor)) : int((i+1)/n_chunks*len(paramTensor))])
         self.n_chunks = n_chunks
         self.p_level = p_level
         self.update_infos = []
