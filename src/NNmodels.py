@@ -37,3 +37,20 @@ class SimpleDNN(nn.Module):
   def forward(self, x):
     out = self.model(x)
     return out
+
+class ComplexDNN(nn.Module):
+  def __init__(self):
+    super(ComplexDNN, self).__init__()
+    self.model = nn.Sequential(
+      nn.Flatten(),
+      nn.Linear(28*28, 100),
+      nn.ReLU(),
+      nn.Linear(100, 50),
+      nn.ReLU(),
+      nn.Linear(50, 10),
+      nn.Softmax(),
+    )
+
+  def forward(self, x):
+    out = self.model(x)
+    return out

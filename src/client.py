@@ -72,12 +72,10 @@ class Client:
     self.params = self.model.state_dict()
 
   
-  def KD_train(self, n_epochs=1):
+  def KD_train(self, n_epochs=3):
     self.model.load_state_dict(self.params)
     student = self.model
-    teacher = self.teacher_models[0]
     student.train()  # tells student to do training
-    teacher.eval()  # tells teacher to eval
 
     optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01)
 
@@ -89,6 +87,9 @@ class Client:
       nTrain = len(self.dataloader.dataset)
 
       for batch_idx, (inputs, targets) in enumerate(self.dataloader):
+          # randomly select teacher for each batch
+
+          teacher = self.teacher_models[np.random.randint(0,len(self.teacher_models))]
           # sets gradient to 0
           optimizer.zero_grad()
 
@@ -106,6 +107,8 @@ class Client:
           partialEpoch = epoch + batch_idx / len(self.dataloader)
 
           # print at STDOUT
-          print('Train Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tError: {:.6f}'.format(
-              partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(self.dataloader), loss.item(), err
-          ))
+          # print('Train Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tError: {:.6f}'.format(
+          #     partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(self.dataloader), loss.item(), err
+          # ))
+    self.params = self.model.state_dict()
+    

@@ -5,7 +5,7 @@ from torchvision import transforms
 import numpy as np
 
 
-def divideData2Clients(local_data_ratio, n_clients, batch_size, eq_IID=False, dif_IID=False, Non_IID=False):
+def divideData2Clients(local_data_ratio, batch_size, n_clients, eq_IID=False, dif_IID=False, Non_IID=False):
     trainset = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transforms.ToTensor())
 
     if eq_IID:

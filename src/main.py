@@ -13,7 +13,7 @@ import dataLoader as dl
 import test as test
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_clients', type=int, default=2, help='')
+parser.add_argument('--n_clients', type=int, default=5, help='')
 parser.add_argument('--n_chunks', type=int, default=10, help='')
 parser.add_argument('--p_level', type=int, default=10, help='')
 parser.add_argument('--batch_size', type=int, default=1, help='')
@@ -39,7 +39,7 @@ else:
 
 opt = parser.parse_args()
 
-train_loader = dl.divideData2Clients(opt.local_data_ratio, opt.n_clients, opt.batch_size, eq_IID=True)
+train_loader = dl.divideData2Clients(opt.local_data_ratio, opt.batch_size, opt.n_clients, eq_IID=True)
 
 initialmodel = opt.model_type()
 
@@ -49,11 +49,11 @@ test_acc_log = [0 for _ in range(opt.n_rounds)]
 
 # make client
 for i in range(opt.n_clients):
-  clients.append(clt.Client('device-' + str(i), train_loader[i], opt.model_type))
+  if i==0:
+    clients.append(clt.Client('device-' + str(i), train_loader[i], nm.ComplexDNN))
 
-# add links to teachers
-for idx, client in enumerate(clients):
-  client.teachers = [clients[idx-1]]
+  else:
+    clients.append(clt.Client('device-' + str(i), train_loader[i], opt.model_type))
 
 # local train and make local model one time
 for client in clients:
@@ -61,23 +61,27 @@ for client in clients:
 
 # rounds
 for i in range(opt.n_rounds):
+  print(str(i) + " round start")
 
   # get teacher models from adjacent teacher clients
-  for client in clients:
+  for idx, client in enumerate(clients):
+    n_teachers = np.random.randint(1, opt.n_clients)
+    idx_teachers = np.random.permutation(np.delete(np.arange(opt.n_clients), [idx]))[:n_teachers]
+    print(str(idx) + " client teachers are ", idx_teachers)
+    client.teachers = [clients[idx_teacher] for idx_teacher in idx_teachers]
     client.get_teacher_models()
   
   # distillates knowledge from teacher models
   # local train once on the data
   for client in clients:
     client.KD_train()
-    client.local_train()
   
   #test all clients with test dataset
   for client in clients:
     test_acc = test.test(client.model_type, opt.batch_size, client.params)
     test_acc_log[i] += test_acc
 
-  test_acc_log[i]/opt.n_clients
+  test_acc_log[i] /= opt.n_clients
 
 plt.plot(test_acc_log)
 plt.show()
