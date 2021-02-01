@@ -3,6 +3,8 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 
+import test as test
+
 def criterion_KD(
     outputs,
     labels,
@@ -18,7 +20,7 @@ def criterion_KD(
     return loss_KD
 
 class Client:
-  def __init__(self, clientID, dataloader, model_type):
+  def __init__(self, clientID, dataloader, model_type, batch_size):
     self.clientID = clientID 
     self.teachers = None # 모델 받아올 클라이언트들을 보관하는 리스트
     self.teacher_models = [] #받아온 모델 보관하는 리스트 
@@ -26,6 +28,7 @@ class Client:
     self.params = None #클라이언트가 가지고 있는 파라미터들 
     self.model = model_type() #학습을 위해 존재하는 구조 
     self.model_type = model_type #구조 클래스를 나타냄, student 가 사용
+    self.batch_size = batch_size
 
 
   def get_teacher_models(self):
@@ -110,5 +113,4 @@ class Client:
           # print('Train Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tError: {:.6f}'.format(
           #     partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(self.dataloader), loss.item(), err
           # ))
-    self.params = self.model.state_dict()
-    
+    self.params = self.model.state_dict()    

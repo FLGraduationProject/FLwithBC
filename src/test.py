@@ -3,13 +3,12 @@ import torch
 import dataLoader as dl
 
 
-def test(model, batch_size, parameters):
+def test(client):
     print("--------------------Test data---------------------")
-    testloader = dl.testLoader(batch_size)
+    testloader = dl.testLoader(client.batch_size)
 
     # This is for test data
-    testmodel = model()
-    testmodel.load_state_dict(parameters)
+    testmodel = client.model
     correct = 0
     total = 0
     with torch.no_grad():

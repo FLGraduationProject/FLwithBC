@@ -1,5 +1,4 @@
 import argparse
-import matplotlib.pyplot as plt
 
 import torch
 import torchvision
@@ -11,6 +10,11 @@ import NNmodels as nm
 import client as clt
 import dataLoader as dl
 import test as test
+
+
+
+import torch.multiprocessing as mp 
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_clients', type=int, default=5, help='')
@@ -37,51 +41,55 @@ else:
     print('학습을 진행하는 기기: CPU')
     '''
 
-opt = parser.parse_args()
 
-train_loader = dl.divideData2Clients(opt.local_data_ratio, opt.batch_size, opt.n_clients, eq_IID=True)
+def KD_trainNtest(client):
+  client.KD_train()
+  test_acc = test.test(client)
 
-initialmodel = opt.model_type()
+if __name__ == '__main__':
+  opt = parser.parse_args()
 
+  train_loader = dl.divideData2Clients(opt.local_data_ratio, opt.batch_size, opt.n_clients, eq_IID=True)
 
-clients = []
-test_acc_log = [0 for _ in range(opt.n_rounds)]
+  initialmodel = opt.model_type()
 
-# make client
-for i in range(opt.n_clients):
-  if i==0:
-    clients.append(clt.Client('device-' + str(i), train_loader[i], nm.ComplexDNN))
+  clients = []
+  test_acc_log = [0 for _ in range(opt.n_rounds)]
 
-  else:
-    clients.append(clt.Client('device-' + str(i), train_loader[i], opt.model_type))
+  # make client
+  for i in range(opt.n_clients):
+    if i==0:
+      clients.append(clt.Client('device-' + str(i), train_loader[i], nm.ComplexDNN, opt.batch_size))
 
-# local train and make local model one time
-for client in clients:
-  client.local_train()
+    else:
+      clients.append(clt.Client('device-' + str(i), train_loader[i], opt.model_type, opt.batch_size))
 
-# rounds
-for i in range(opt.n_rounds):
-  print(str(i) + " round start")
-
-  # get teacher models from adjacent teacher clients
-  for idx, client in enumerate(clients):
-    n_teachers = np.random.randint(1, opt.n_clients)
-    idx_teachers = np.random.permutation(np.delete(np.arange(opt.n_clients), [idx]))[:n_teachers]
-    print(str(idx) + " client teachers are ", idx_teachers)
-    client.teachers = [clients[idx_teacher] for idx_teacher in idx_teachers]
-    client.get_teacher_models()
-  
-  # distillates knowledge from teacher models
-  # local train once on the data
+  # local train and make local model one time
   for client in clients:
-    client.KD_train()
-  
-  #test all clients with test dataset
-  for client in clients:
-    test_acc = test.test(client.model_type, opt.batch_size, client.params)
-    test_acc_log[i] += test_acc
+    client.local_train()
 
-  test_acc_log[i] /= opt.n_clients
+  # rounds
+  for i in range(opt.n_rounds):
+    print(str(i) + " round start")
 
-plt.plot(test_acc_log)
-plt.show()
+    # get teacher models from adjacent teacher clients
+    for idx, client in enumerate(clients):
+      n_teachers = np.random.randint(1, opt.n_clients)
+      idx_teachers = np.random.permutation(np.delete(np.arange(opt.n_clients), [idx]))[:n_teachers]
+      print(str(idx) + " client teachers are ", idx_teachers)
+      client.teachers = [clients[idx_teacher] for idx_teacher in idx_teachers]
+      client.get_teacher_models()
+    
+    # distillates knowledge from teacher models
+      # pool = mp.Pool(processes=opt.n_clients)
+      # pool.map(KD_trainNtest, clients)
+      # pool.close()
+      # pool.join()
+    processes = []
+    for client in clients:    
+      client.model.share_memory()
+      p = mp.Process(target=KD_trainNtest, args=(client,))
+      p.start()
+      processes.append(p)
+    
+    for p in processes: p.join()
