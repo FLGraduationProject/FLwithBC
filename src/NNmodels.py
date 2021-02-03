@@ -31,7 +31,7 @@ class SimpleDNN(nn.Module):
       nn.Linear(28*28, 100),
       nn.ReLU(),
       nn.Linear(100, 10),
-      nn.Softmax(),
+      nn.Softmax(dim=1),
     )
 
   def forward(self, x):
@@ -48,7 +48,7 @@ class ComplexDNN(nn.Module):
       nn.Linear(100, 50),
       nn.ReLU(),
       nn.Linear(50, 10),
-      nn.Softmax(),
+      nn.Softmax(dim=1),
     )
 
   def forward(self, x):
