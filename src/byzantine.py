@@ -5,31 +5,29 @@ import torch.nn.functional as F
 import time
 import math as math
 import matplotlib.pyplot as plt
-import time
 
 import criterion_KD as KD
 import test as test
-        
-def make_client(clientID, trainloader, testloader, model_type, batch_size, n_clients, inQ, outQ):
 
-  client = Client(clientID, trainloader, testloader, model_type, batch_size)
-  
-  client.local_train(inQ, outQ)
+def make_byzantine(clientID, trainloader, testloader, model_type, batch_size, n_clients, inQ, outQ):
+  byzantine = Byzantine(clientID, trainloader, testloader, model_type, batch_size)
+
+  byzantine.local_train(inQ, outQ)
 
   test_log = []
 
-  for i in range(3):
+  for i in range(5):
     # select teachers
     n_teachers = np.random.randint(1, n_clients)
     idx_teachers = np.random.permutation(np.delete(np.arange(n_clients), clientID))[:n_teachers]
-    print(str(client.clientID) + " client teachers are ", idx_teachers)
+    print(str(byzantine.clientID) + " byzantine teachers are ", idx_teachers)
 
-    client.teachers = idx_teachers
+    byzantine.teachers = idx_teachers
 
-    client.get_teacher_models(inQ, outQ)
+    byzantine.get_teacher_models(inQ, outQ)
   
     # KD train
-    test_acc = client.KD_trainNtest(inQ, outQ)
+    test_acc = byzantine.KD_trainNtest(inQ, outQ)
     test_log.append(test_acc)
   
   plt.plot(test_log)
@@ -37,11 +35,8 @@ def make_client(clientID, trainloader, testloader, model_type, batch_size, n_cli
   outQ.put({'type': 'done'})
   print(clientID, 'is done')
 
-      
 
-
-
-class Client:
+class Byzantine:
   def __init__(self, clientID, dataloader, testloader, model_type, batch_size):
     self.clientID = clientID 
     self.teachers = None # 모델 받아올 클라이언트들을 보관하는 리스트
@@ -52,15 +47,14 @@ class Client:
     self.model = model_type() #학습을 위해 존재하는 구조 
     self.model_type = model_type #구조 클래스를 나타냄, student 가 사용
     self.batch_size = batch_size
-
-
+  
   def get_teacher_models(self, inQ, outQ):
     # request teachers models
     while True:
       outQ.put({'type': 'read', 'from': self.clientID, 'what': self.teachers})
       while True:
-        time.sleep(0.1)
         if not inQ.empty():
+          time.sleep(0.1)  
           break
       msg = inQ.get()
       if msg['status'] == 'success':
@@ -72,8 +66,7 @@ class Client:
       TM.load_state_dict(data['params'])
       self.teacher_models.append(TM)
 
-
-  def local_train(self, inQ, outQ, n_epochs=1):
+  def local_train(self, inQ, outQ, n_epochs=3):
     print(str(self.clientID) + " training with " + str(len(self.dataloader)) + " data")
     
     self.model.train()
@@ -81,12 +74,16 @@ class Client:
     optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01)
 
     for epoch in range(n_epochs):
+
       train_loss = 0
       total = 0
       correct = 0
 
       for batch_idx, data in enumerate(self.dataloader):
         image, label = data
+
+        # switch label
+        label = 9-label
  
         # Grad initialization
         optimizer.zero_grad()
@@ -110,14 +107,13 @@ class Client:
 
     outQ.put({'type': 'write', 'from': self.clientID, 'data':{'model_type': self.model_type, 'params': self.model.state_dict()}})
     while True:
-      time.sleep(0.1)
       if not inQ.empty():
+        time.sleep(0.1)
         break
     msg = inQ.get()
 
 
-  
-  def KD_trainNtest(self, inQ, outQ, n_epochs=1):
+  def KD_trainNtest(self, inQ, outQ, n_epochs=3):
     student = self.model
     student.train()  # tells student to do training
 
@@ -132,6 +128,9 @@ class Client:
       for batch_idx, data in enumerate(self.dataloader):
           image, label = data
 
+          # switch label
+          label = 9 - label
+
           # randomly select teacher for each batch
           teacher = self.teacher_models[np.random.randint(0,len(self.teacher_models))]
           # sets gradient to 0
@@ -144,7 +143,7 @@ class Client:
           dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)
           alpha = (math.sqrt(2) - dist)/math.sqrt(2)
           # alpha = 0.9
-          temperature = ()
+          temperature = 3
           loss = KD.criterion_KD(outputs, label, teacher_outputs, alpha=alpha, temperature=temperature)
           loss.backward()
           optimizer.step()
@@ -162,10 +161,9 @@ class Client:
           # ))
     outQ.put({'type': 'write', 'from': self.clientID, 'data':{'model_type': self.model_type, 'params': self.model.state_dict()}})
     while True:
-      time.sleep(0.1)
       if not inQ.empty():
+        time.sleep(0.1)
         break
     msg = inQ.get()
 
     return test.test(self)
-    
