@@ -1,5 +1,4 @@
 import argparse
-import matplotlib.pyplot as plt
 
 import torch
 import torch.multiprocessing as mp
@@ -13,6 +12,11 @@ import client as clt
 import byzantine as bz
 import test as test
 from data_loader.dataLoader import get_data_loaders
+
+
+
+import torch.multiprocessing as mp 
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_clients', type=int, default=5, help='')

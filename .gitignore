@@ -3,4 +3,4 @@ data/
 
 #ignore pycache files
 src/__pycache__/
-*/__pycache__/
+src/data_loader/__pycache__/

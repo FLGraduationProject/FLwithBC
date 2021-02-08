@@ -32,8 +32,9 @@ def make_client(clientID, trainloader, testloader, model_type, batch_size, n_cli
     test_acc = client.KD_trainNtest(inQ, outQ)
     test_log.append(test_acc)
   
+  fig = plt.figure()
   plt.plot(test_log)
-  plt.show()
+  fig.savefig('{}.png'.format(clientID))
   outQ.put({'type': 'done'})
   print(clientID, 'is done')
 
