@@ -144,7 +144,7 @@ class Client:
           dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)
           alpha = (math.sqrt(2) - dist)/math.sqrt(2)
           # alpha = 0.9
-          temperature = ()
+          temperature = 3
           loss = KD.criterion_KD(outputs, label, teacher_outputs, alpha=alpha, temperature=temperature)
           loss.backward()
           optimizer.step()
