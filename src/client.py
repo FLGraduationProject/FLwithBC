@@ -32,8 +32,9 @@ def make_client(clientID, trainloader, testloader, model_type, batch_size, n_cli
     test_acc = client.KD_trainNtest(inQ, outQ)
     test_log.append(test_acc)
   
+  fig = plt.figure()
   plt.plot(test_log)
-  plt.show()
+  fig.savefig('{}.png'.format(clientID))
   outQ.put({'type': 'done'})
   print(clientID, 'is done')
 
@@ -160,9 +161,6 @@ class Client:
           # print('Train Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tError: {:.6f}'.format(
           #     partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(self.dataloader), loss.item(), err
           # ))
-<<<<<<< HEAD
-    self.params = self.model.state_dict()    
-=======
     outQ.put({'type': 'write', 'from': self.clientID, 'data':{'model_type': self.model_type, 'params': self.model.state_dict()}})
     while True:
       time.sleep(0.1)
@@ -172,4 +170,3 @@ class Client:
 
     return test.test(self)
     
->>>>>>> a36e4f04a79c4149c75dcaf589f2701e4617b298
