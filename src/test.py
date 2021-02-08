@@ -1,11 +1,7 @@
 import torch
 
-import dataLoader as dl
-
-
 def test(client):
-    print("--------------------Test data---------------------")
-    testloader = dl.testLoader(client.batch_size)
+    testloader = client.testloader
 
     # This is for test data
     testmodel = client.model
@@ -21,6 +17,5 @@ def test(client):
             correct += predicted.eq(label).sum().item()
 
             if (batch_idx + 1) == len(testloader):
-                print("Test_Acc:{:.3f}%".format(100. * correct / total))
-    print("--------------------------------------------------")
+                print(client.clientID, "Test_Acc:{:.3f}%".format(100. * correct / total))
     return 100. * correct / total

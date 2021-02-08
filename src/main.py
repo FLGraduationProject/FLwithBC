@@ -1,6 +1,7 @@
 import argparse
 
 import torch
+import torch.multiprocessing as mp
 import torchvision
 from torchvision import transforms
 import torch.nn as nn
@@ -8,8 +9,9 @@ import numpy as np
 
 import NNmodels as nm
 import client as clt
-import dataLoader as dl
+import byzantine as bz
 import test as test
+from data_loader.dataLoader import get_data_loaders
 
 
 
@@ -18,15 +20,11 @@ import torch.multiprocessing as mp
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_clients', type=int, default=5, help='')
-parser.add_argument('--n_chunks', type=int, default=10, help='')
-parser.add_argument('--p_level', type=int, default=10, help='')
 parser.add_argument('--batch_size', type=int, default=1, help='')
-parser.add_argument('--local_data_ratio', type=float, default=0.01, help='data size ratio each participant has')
-parser.add_argument('--n_clients_single_round', type=int, default=5, help='')
-parser.add_argument('--n_rounds', type=int, default=10, help='')
 parser.add_argument('--model_type', type=nn.Module, default=nm.SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=1)
 parser.add_argument('--learning_rate', type=float, default=0.01)
+parser.add_argument('--n_classes', type=int, default=10)
 '''
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
@@ -41,55 +39,61 @@ else:
     print('학습을 진행하는 기기: CPU')
     '''
 
+def main_worker(n_clients, inQ, outQs):
+  n_processes_done = 0
+  memory = {}
+  while n_processes_done != n_clients:
+    if not inQ.empty():
+      msg = inQ.get()
+      if msg['type'] == 'write':
+        memory[msg['from']] = msg['data']
+        outQs[msg['from']].put({'status': 'success'})
 
-def KD_trainNtest(client):
-  client.KD_train()
-  test_acc = test.test(client)
+      elif msg['type'] == 'read':
+        # check if all request are in memory
+        allInMem = True
+        for req in msg['what']:
+          if req not in memory.keys():
+            allInMem = False
+            break
+            
+        if allInMem:
+          outQs[msg['from']].put({'status': 'success', 'data': [memory[req] for req in msg['what']]})
 
+        else:
+          outQs[msg['from']].put({'status': 'fail'})
+          
+      elif msg['type'] == 'done':
+        n_processes_done += 1
+
+    
+      
+      
 if __name__ == '__main__':
   opt = parser.parse_args()
+  # main_process_model_storage = [None for _ in range(opt.n_clients)]
 
-  train_loader = dl.divideData2Clients(opt.local_data_ratio, opt.batch_size, opt.n_clients, eq_IID=True)
+  client_loaders, test_loader = get_data_loaders(opt.n_classes, 0.1, opt.n_clients, 7, opt.batch_size)
 
-  initialmodel = opt.model_type()
+  inQ = mp.Queue()
+  outQs = {i: mp.Queue() for i in range(opt.n_clients)}
 
-  clients = []
-  test_acc_log = [0 for _ in range(opt.n_rounds)]
+  byzantines = []
 
-  # make client
+  # main worker process
+  processes = []
+  p = mp.Process(target=main_worker, args=(opt.n_clients, inQ, outQs))
+  p.start()
+  processes.append(p)
+
+  # distillates knowledge from teacher models
   for i in range(opt.n_clients):
-    if i==0:
-      clients.append(clt.Client('device-' + str(i), train_loader[i], nm.ComplexDNN, opt.batch_size))
-
+    if i in byzantines:
+      p = mp.Process(target=bz.make_byzantine, args=(i, client_loaders[i], test_loader, opt.model_type, opt.batch_size, opt.n_clients, outQs[i], inQ))
     else:
-      clients.append(clt.Client('device-' + str(i), train_loader[i], opt.model_type, opt.batch_size))
+      p = mp.Process(target=clt.make_client, args=(i, client_loaders[i], test_loader, opt.model_type, opt.batch_size, opt.n_clients, outQs[i], inQ))
+    p.start()
+    processes.append(p)
+  
+  for p in processes: p.join()
 
-  # local train and make local model one time
-  for client in clients:
-    client.local_train()
-
-  # rounds
-  for i in range(opt.n_rounds):
-    print(str(i) + " round start")
-
-    # get teacher models from adjacent teacher clients
-    for idx, client in enumerate(clients):
-      n_teachers = np.random.randint(1, opt.n_clients)
-      idx_teachers = np.random.permutation(np.delete(np.arange(opt.n_clients), [idx]))[:n_teachers]
-      print(str(idx) + " client teachers are ", idx_teachers)
-      client.teachers = [clients[idx_teacher] for idx_teacher in idx_teachers]
-      client.get_teacher_models()
-    
-    # distillates knowledge from teacher models
-      # pool = mp.Pool(processes=opt.n_clients)
-      # pool.map(KD_trainNtest, clients)
-      # pool.close()
-      # pool.join()
-    processes = []
-    for client in clients:    
-      client.model.share_memory()
-      p = mp.Process(target=KD_trainNtest, args=(client,))
-      p.start()
-      processes.append(p)
-    
-    for p in processes: p.join()
