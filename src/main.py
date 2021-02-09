@@ -12,6 +12,7 @@ import client as clt
 import byzantine as bz
 import test as test
 from data_loader.dataLoader import get_data_loaders
+import workers as work
 
 
 
@@ -19,82 +20,68 @@ import torch.multiprocessing as mp
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_clients', type=int, default=20, help='')
-parser.add_argument('--batch_size', type=int, default=1, help='')
+parser.add_argument('--n_clients', type=int, default=5, help='')
+parser.add_argument('--batch_size', type=int, default=4, help='')
 parser.add_argument('--model_type', type=nn.Module, default=nm.SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=1)
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--n_classes', type=int, default=10)
-'''
-if torch.cuda.is_available():
-    device = torch.device("cuda:0")
-    useGPU = True
-    print('학습을 진행하는 기기:', device)
+parser.add_argument('--max_n_KD_train', type=int, default=2)
+parser.add_argument('--n_teachers', type=int, default=4)
+
+      
+if __name__ == '__main__':
+  mp.set_start_method('spawn')
+  
+  if torch.cuda.is_available():
+    devices = [torch.device("cuda:0"), torch.device("cuda:1")]
+    cuda = True
+    print('학습을 진행하는 기기:', devices)
     print('cuda index:', torch.cuda.current_device())
     print('gpu 개수:', torch.cuda.device_count())
     print('graphic name:', torch.cuda.get_device_name())
-else:
-    device = None
-    useGPU = False
+  else:
+    device = torch.device('cpu')
+    cuda = False
     print('학습을 진행하는 기기: CPU')
-    '''
 
-def main_worker(n_clients, inQ, outQs):
-  n_processes_done = 0
-  memory = {}
+  args = parser.parse_args()
 
-  while n_processes_done != n_clients:
-    if not inQ.empty():
-      msg = inQ.get()
-      if msg['type'] == 'write':
-        memory[msg['from']] = msg['data']
-        outQs[msg['from']].put({'status': 'success'})
+  # make ids for clients
+  clientIDs = ['client-{}'.format(i) for i in range(args.n_clients)]
 
-      elif msg['type'] == 'read':
-        # check if all request are in memory
-        allInMem = True
-        for req in msg['what']:
-          if req not in memory.keys():
-            allInMem = False
-            break
-            
-        if allInMem:
-          outQs[msg['from']].put({'status': 'success', 'data': [memory[req] for req in msg['what']]})
+  # choose model types for each client
+  client_model_types = {clientID: args.model_type for clientID in clientIDs}
 
-        else:
-          outQs[msg['from']].put({'status': 'fail'})
-          
-      elif msg['type'] == 'done':
-        n_processes_done += 1
+  # make data loaders for each clients train data and universal test set
+  dataLoaders, testLoader = get_data_loaders(args.n_classes, 0.1, args.n_clients, 7, args.batch_size)
+  clientLoaders = {clientIDs[i]: dataLoaders[i] for i in range(args.n_clients)}
 
-    
-      
-      
-if __name__ == '__main__':
-  opt = parser.parse_args()
-  # main_process_model_storage = [None for _ in range(opt.n_clients)]
-
-  client_loaders, test_loader = get_data_loaders(opt.n_classes, 0.1, opt.n_clients, 7, opt.batch_size)
-
-  inQ = mp.Queue()
-  outQs = {i: mp.Queue() for i in range(opt.n_clients)}
+  # make asynchronous code sequence for this simulation
+  code_sequence = work.code_generator(clientIDs, args.max_n_KD_train, args.n_teachers)
+  
+  # Queues for multi processing between code worker and gpu worker
+  workQ = mp.Queue()
+  resultQs = {clientID: mp.Queue() for clientID in clientIDs}
+  
 
   byzantines = []
 
-  # main worker process
+  # process for executing the code sequence generated from code generator
   processes = []
-  p = mp.Process(target=main_worker, args=(opt.n_clients, inQ, outQs))
+  p = mp.Process(target=work.code_worker, args=(code_sequence, clientIDs, workQ, resultQs))
   p.start()
   processes.append(p)
 
-  # distillates knowledge from teacher models
-  for i in range(opt.n_clients):
-    if i in byzantines:
-      p = mp.Process(target=bz.make_byzantine, args=(i, client_loaders[i], test_loader, opt.model_type, opt.batch_size, opt.n_clients, outQs[i], inQ))
-    else:
-      p = mp.Process(target=clt.make_client, args=(i, client_loaders[i], test_loader, opt.model_type, opt.batch_size, opt.n_clients, outQs[i], inQ))
-    p.start()
-    processes.append(p)
+  # process for training the client on the gpu
+  p = mp.Process(target=work.gpu_worker, args=(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, devices[0]))
+  p.start()
+  processes.append(p)
+
+  # process for training the client on the gpu
+  p = mp.Process(target=work.gpu_worker, args=(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, devices[1]))
+  p.start()
+  processes.append(p)
   
   for p in processes: p.join()
 
