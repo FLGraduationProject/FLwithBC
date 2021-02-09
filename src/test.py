@@ -10,6 +10,10 @@ def test(client):
     with torch.no_grad():
         for batch_idx, data in enumerate(testloader):
             image, label = data
+
+            image = image.cuda()
+            label = label.cuda()
+            
             output = testmodel(image)
 
             _, predicted = output.max(1)

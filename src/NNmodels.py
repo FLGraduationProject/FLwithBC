@@ -31,7 +31,7 @@ class SimpleDNN(nn.Module):
       nn.Flatten(),
       nn.Linear(28*28, 100),
       nn.ReLU(),
-      nn.Linear(100, 10),
+      nn.Linear(28*28, 10),
       nn.Softmax(dim=1),
     )
 

@@ -19,7 +19,7 @@ import torch.multiprocessing as mp
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_clients', type=int, default=5, help='')
+parser.add_argument('--n_clients', type=int, default=20, help='')
 parser.add_argument('--batch_size', type=int, default=1, help='')
 parser.add_argument('--model_type', type=nn.Module, default=nm.SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=1)
@@ -42,6 +42,7 @@ else:
 def main_worker(n_clients, inQ, outQs):
   n_processes_done = 0
   memory = {}
+
   while n_processes_done != n_clients:
     if not inQ.empty():
       msg = inQ.get()

@@ -50,7 +50,7 @@ class Client:
     self.dataloader = dataloader #보유 데이터셋을 pytorch에서 사용하는 dataloader형으로 
     self.testloader = testloader
     self.params = None #클라이언트가 가지고 있는 파라미터들 
-    self.model = model_type() #학습을 위해 존재하는 구조 
+    self.model = model_type().cuda() #학습을 위해 존재하는 구조 
     self.model_type = model_type #구조 클래스를 나타냄, student 가 사용
     self.batch_size = batch_size
 
@@ -71,6 +71,7 @@ class Client:
     for data in msg['data']:
       TM = data['model_type']()
       TM.load_state_dict(data['params'])
+      TM = TM.cuda()
       self.teacher_models.append(TM)
 
 
@@ -88,6 +89,9 @@ class Client:
 
       for batch_idx, data in enumerate(self.dataloader):
         image, label = data
+
+        image = image.cuda()
+        label = label.cuda()
  
         # Grad initialization
         optimizer.zero_grad()
@@ -109,7 +113,7 @@ class Client:
       print("Step: {}/{} | Acc:{:.3f}%".format(batch_idx + 1, len(self.dataloader),
                                                                                   100. * correct / total))
 
-    outQ.put({'type': 'write', 'from': self.clientID, 'data':{'model_type': self.model_type, 'params': self.model.state_dict()}})
+    outQ.put({'type': 'write', 'from': self.clientID, 'data':{'model_type': self.model_type, 'params': {k: v.cpu() for k, v in self.model.state_dict().items()}}})
     while True:
       time.sleep(0.1)
       if not inQ.empty():
@@ -132,6 +136,9 @@ class Client:
 
       for batch_idx, data in enumerate(self.dataloader):
           image, label = data
+                  
+          image = image.cuda()
+          label = label.cuda()
 
           # randomly select teacher for each batch
           teacher = self.teacher_models[np.random.randint(0,len(self.teacher_models))]
@@ -145,23 +152,12 @@ class Client:
           dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)
           alpha = (math.sqrt(2) - dist)/math.sqrt(2)
           # alpha = 0.9
-          temperature = ()
+          temperature = 3
           loss = KD.criterion_KD(outputs, label, teacher_outputs, alpha=alpha, temperature=temperature)
           loss.backward()
           optimizer.step()
 
-          # for log
-          nProcessed += len(image)
-          pred = outputs.data.max(1)[1]  # get the index of the max log-probability
-          incorrect = pred.ne(label.data).cpu().sum()  # ne: not equal
-          err = 100. * incorrect / len(image)
-          partialEpoch = epoch + batch_idx / len(self.dataloader)
-
-          # print at STDOUT
-          # print('Train Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tError: {:.6f}'.format(
-          #     partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(self.dataloader), loss.item(), err
-          # ))
-    outQ.put({'type': 'write', 'from': self.clientID, 'data':{'model_type': self.model_type, 'params': self.model.state_dict()}})
+    outQ.put({'type': 'write', 'from': self.clientID, 'data':{'model_type': self.model_type, 'params': {k: v.cpu() for k, v in self.model.state_dict().items()}}})
     while True:
       time.sleep(0.1)
       if not inQ.empty():
