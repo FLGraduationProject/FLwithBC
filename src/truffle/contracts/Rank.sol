@@ -11,37 +11,43 @@ contract Rank {
 	uint[] rankarr ; 
 
 	uint8 numclient ; 
-	
-	function setting(uint8 numclients) public{
+
+	constructor() public {
 		n_clientsVoted = 0 ;
-		numclient = numclients ; 
+		numclient = 5 ; 
 		avgdistarr = new uint[](numclient) ; 
 		votearr = new uint[](numclient) ; 
 		rankarr = new uint[](numclient) ; 
 	}
+	
+	function reset() public {
+	    n_clientsVoted = 0 ;
+		avgdistarr = new uint[](numclient) ; 
+		votearr = new uint[](numclient) ; 
+	}
 
 	function ranking() public {
-		for(uint i = 0 ; i<votearr.length ; i++){
+		for(uint i = 0 ; i<numclient ; i++){
 			avgdistarr[i]/=votearr[i] ; 
 		}
 
-		for(uint i = 0 ; i<avgdistarr.length ; i++){
+		for(uint i = 0 ; i<numclient ; i++){
 			uint8 rank = 1 ;
-			for(uint j = 0 ; j<avgdistarr.length ; j++){
+			for(uint j = 0 ; j<numclient ; j++){
 				if(avgdistarr[j]!=0){
 					if(avgdistarr[j]<avgdistarr[i]){
-						rank ++ ; 
+						rank++ ; 
 					}
 				} 
 			}
 			rankarr[i] = rank ; 
 		}
-		setting(numclient) ;
+		reset();
 	}
 
 	function upload(uint16[] memory avgdist) public {
-		n_clientsVoted ++ ;
-		for (uint i = 0 ; i < avgdist.length ; i++){
+		n_clientsVoted++ ;
+		for (uint i = 0 ; i < numclient ; i++){
 			if(avgdist[i]!=0){
 				votearr[i]++ ;
 			}

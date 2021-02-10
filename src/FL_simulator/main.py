@@ -10,7 +10,7 @@ import numpy as np
 from nnModel.nnModel import *
 from data_loader.dataLoader import get_data_loaders
 import workers as work
-from smart_contract.smart_contract import SmartContract
+from smart_contract.smart_contract import SmartContract, smartContractMaker
 
 
 
@@ -19,7 +19,7 @@ import torch.multiprocessing as mp
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_clients', type=int, default=5, help='')
-parser.add_argument('--batch_size', type=int, default=20, help='')
+parser.add_argument('--batch_size', type=int, default=30, help='')
 parser.add_argument('--model_type', type=nn.Module, default=SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=1)
 parser.add_argument('--learning_rate', type=float, default=0.01)
@@ -64,24 +64,19 @@ if __name__ == '__main__':
   resultQs = {clientID: mp.Queue() for clientID in clientIDs}
 
   # Smart Contract for ranking avg distance
-  smartContract = SmartContract(clientIDs)
+  contractAddress, abi = smartContractMaker(clientIDs)
 
   byzantines = []
 
   # process for executing the code sequence generated from code generator
   processes = []
-  p = mp.Process(target=work.code_worker, args=(code_sequence, clientIDs, workQ, resultQs, args.n_process_per_gpu))
+  p = mp.Process(target=work.code_worker, args=(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, args.n_process_per_gpu))
   p.start()
   processes.append(p)
 
   for _ in range(args.n_process_per_gpu):
     # process for training the client on the gpu
-    p = mp.Process(target=work.gpu_worker, args=(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, smartContract, devices[0]))
-    p.start()
-    processes.append(p)
-
-    # process for training the client on the gpu
-    p = mp.Process(target=work.gpu_worker, args=(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, smartContract, devices[1]))
+    p = mp.Process(target=work.gpu_worker, args=(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, contractAddress, abi, devices[0]))
     p.start()
     processes.append(p)
   

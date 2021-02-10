@@ -29,7 +29,7 @@ def test(train_type, clientID, client_model, testLoader, device):
             correct += predicted.eq(label).sum().item()
 
             if (batch_idx + 1) == len(testLoader):
-                print(clientID, "${train_type} Test_Acc:{:.3f}%".format(100. * correct / total))
+                print(clientID, "Test_Acc:{:.3f}%".format(100. * correct / total))
 
     return 100. * correct / total
 
@@ -82,16 +82,17 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
       label = label.to(device)
 
       # randomly select teacher for each batch
-      teacherID = teacherIDs[np.random.randint(0,len(teacher_models))]
-      teacher = teacher_models[teacherID]
+      teacher_idx = np.random.randint(0,len(teacher_models))
+      teacherID = teacherIDs[teacher_idx]
+      teacher = teacher_models[teacher_idx]
       # sets gradient to 0
       optimizer.zero_grad()
       # forward, backward, and opt
       outputs, teacher_outputs = student(image), teacher(image)
 
       dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)
-      distSum[teacherID][0] += dist
-      distNum[teacherID][1] += 1
+      distSum[teacherID] += dist
+      distNum[teacherID] += 1
       alpha = (math.sqrt(2) - dist)/math.sqrt(2)
       temperature = 3
 
@@ -101,6 +102,6 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
 
   # get average distance then send it through contract
   distAvg = {teacherID: distSum[teacherID]/distNum[teacherID] for teacherID in teacherIDs}
-  smartContract.upload_contract(clientID, [distAvg[clientID] if clientID in teacherIDs else 0 for clientID in clientIDs])
+  smartContract.upload_contract(clientID, [int(distAvg[clientID]*10000) if clientID in teacherIDs else 0 for clientID in clientIDs])
 
   return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('KD train', clientID, client_model, testLoader, device)

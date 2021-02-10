@@ -34,6 +34,9 @@ import torch
 import torch.nn as nn
 import time
 
+from smart_contract.smart_contract import SmartContract, smartContractMaker
+
+
 def code_generator(clientIDs, n_rounds, n_teachers):
   code_sequence = []
   # start local train all clients first
@@ -84,9 +87,11 @@ def code_generator(clientIDs, n_rounds, n_teachers):
 
     
 
-def code_worker(code_sequence, clientIDs, workQ, resultQs, n_process_per_gpu):
+def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_process_per_gpu):
   model_params = {clientID: None for clientID in clientIDs}
   test_results = {clientID: [] for clientID in clientIDs}
+
+  smartContract = SmartContract(clientIDs, contractAddress, abi)
 
   for code in code_sequence:
     if code['action'] == 'start':
@@ -123,11 +128,13 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, n_process_per_gpu):
 
 
 
-def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, smartContract, device):
+def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, contractAddress, abi, device):
 
   client_models = {clientID: client_model_types[clientID]().to(device) for clientID in clientIDs}
 
   processDone = False
+
+  smartContract = SmartContract(clientIDs, contractAddress, abi)
 
   while not processDone:
     if not workQ.empty():
@@ -136,11 +143,12 @@ def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, 
         client_model = client_models[msg['client']]
         client_model.load_state_dict({k: v.to(device) for k, v in msg['model_data']['main_client'].items()})
         teacher_models = []
-        teacherIDs = msg['model_data']['teacher_clients'].keys()
-        for teacher in teacherIDs:
-          teacher_model = client_models[teacher]
-          teacher_model.load_state_dict({k: v.to(device) for k, v in msg['model_data']['teacher_clients'][teacher].items()})
+        teacherIDs = []
+        for teacherID in msg['model_data']['teacher_clients'].keys():
+          teacher_model = client_models[teacherID]
+          teacher_model.load_state_dict({k: v.to(device) for k, v in msg['model_data']['teacher_clients'][teacherID].items()})
           teacher_models.append(teacher_model)
+          teacherIDs.append(teacherID)
         updated_params, test_result = cf.KD_trainNtest(clientIDs, client_model, msg['client'], clientLoaders[msg['client']], testLoader, teacherIDs, teacher_models, smartContract, device)
         resultQs[msg['client']].put({'updated_params': updated_params, 'test_result': test_result})
 
