@@ -11,7 +11,7 @@ def smartContractMaker(clientIDs):
   abi = truffleFile['abi']
   bytecode = truffleFile['bytecode']
   contract = web3.eth.contract(bytecode=bytecode, abi=abi)
-  tx_hash = contract.constructor().transact({'from':accounts[0]})
+  tx_hash = contract.constructor(len(clientIDs)).transact({'from':accounts[0]})
   tx_receipt = web3.eth.waitForTransactionReceipt(tx_hash)
   print("contract made")
   return tx_receipt.contractAddress, abi
@@ -20,11 +20,10 @@ class SmartContract:
   def __init__(self, clientIDs, contractAddress, abi):
     self.numclient = len(clientIDs)
     ganache_url = "http://127.0.0.1:7545"
-    self.web3 = Web3(Web3.HTTPProvider(ganache_url))
+    self.web3 = Web3(Web3.HTTPProvider(ganache_url, request_kwargs={'timeout': 60}))
     accounts = self.web3.eth.accounts
     self.accounts = {clientIDs[i]: accounts[i] for i in range(len(clientIDs))}
     self.contract = self.web3.eth.contract(address=contractAddress, abi=abi)
-    print("contract made")
 
   def set_contract(self,clientID,numclient):
     print("number of client {}".format(self.numclient))

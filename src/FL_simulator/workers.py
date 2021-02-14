@@ -124,6 +124,7 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
   for _ in range(n_process_per_gpu):
     workQ.put({'train_method': 'done_training'})
     workQ.put({'train_method': 'done_training'})
+    print(test_results)
 
 
 

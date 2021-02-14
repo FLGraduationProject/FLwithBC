@@ -72,6 +72,8 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
   distSum = {teacherID: 0 for teacherID in teacherIDs}
   distNum = {teacherID: 0 for teacherID in teacherIDs}
 
+  ranking = smartContract.seerank_contract()
+  client_temperatures = {clientIDs[i]: 6-ranking[i] for i in range(len(clientIDs))}
 
   for epoch in range(n_epochs):
 
@@ -93,8 +95,10 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
       dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)
       distSum[teacherID] += dist
       distNum[teacherID] += 1
-      alpha = (math.sqrt(2) - dist)/math.sqrt(2)
-      temperature = 3
+      # alpha = (math.sqrt(2) - dist)/math.sqrt(2)
+      temperature = client_temperatures[teacherID]
+      alpha = 0.9
+      # temperature = 3
 
       loss = criterion_KD(outputs, label, teacher_outputs, alpha=alpha, temperature=temperature)
       loss.backward()
@@ -102,6 +106,8 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
 
   # get average distance then send it through contract
   distAvg = {teacherID: distSum[teacherID]/distNum[teacherID] for teacherID in teacherIDs}
-  smartContract.upload_contract(clientID, [int(distAvg[clientID]*10000) if clientID in teacherIDs else 0 for clientID in clientIDs])
+  pointsArr = [int(distAvg[clientID]*1000) if clientID in teacherIDs else 0 for clientID in clientIDs]
+  print(pointsArr)
+  smartContract.upload_contract(clientID, pointsArr)
 
   return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('KD train', clientID, client_model, testLoader, device)

@@ -24,7 +24,7 @@ parser.add_argument('--model_type', type=nn.Module, default=SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=1)
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--n_classes', type=int, default=10)
-parser.add_argument('--max_n_KD_train', type=int, default=2)
+parser.add_argument('--max_n_KD_train', type=int, default=3)
 parser.add_argument('--n_teachers', type=int, default=4)
 parser.add_argument('--n_process_per_gpu', type=int, default=1)
 
