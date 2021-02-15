@@ -3,7 +3,10 @@ data/
 
 # ignore pycache files
 src/__pycache__/
+src/client_train/__pycache__/
 src/data_loader/__pycache__/
+src/nnModel/__pycache__/
+src/smart_contract/__pycache__/
 
 # ignore result files
 result/
