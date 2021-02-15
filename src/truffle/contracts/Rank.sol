@@ -2,78 +2,117 @@
 pragma solidity >=0.4.22 <0.9.0;
 
 contract Rank {
-	// mapping(uint8 => uint8) public IdtoIndex;
-	// mapping(uint8 => uint8) public IndextoId;
+    // mapping(uint16 => uint16) public IdtoIndex;
+    // mapping(uint16 => uint16) public IndextoId;
 
-	uint8 n_clientsVoted ;
-	uint[] avgdistarr ; 
-	uint[] votearr ; 
-	uint[] rankarr ; 
+    uint8 n_clients;
+    uint8 n_clientsVoted;
 
-	uint8 numclient ; 
+    uint16[][] uploadedPoints;
+    uint16[] evalPoints;
 
-	constructor() public {
-		n_clientsVoted = 0 ;
-		numclient = 5 ; 
-		avgdistarr = new uint[](numclient) ; 
-		votearr = new uint[](numclient) ; 
-		rankarr = new uint[](numclient) ; 
-	}
-	
-	function reset() public {
-	    n_clientsVoted = 0 ;
-		avgdistarr = new uint[](numclient) ; 
-		votearr = new uint[](numclient) ; 
-	}
+    uint16[] justAvgPoints;
+    uint16[] weightAvgPoints;
+    uint16[] n_points;
+    uint16[] n_teachers;
+    uint16[] rankArr;
 
-	function ranking() public {
-		for(uint i = 0 ; i<numclient ; i++){
-			avgdistarr[i]/=votearr[i] ; 
-		}
+    constructor(uint8 num_clients) public {
+        n_clients = num_clients;
+        n_clientsVoted = 0;
+        rankArr = new uint16[](n_clients);
+        uploadedPoints = new uint16[][](n_clients);
+        evalPoints = new uint16[](n_clients);
+        justAvgPoints = new uint16[](n_clients);
+        weightAvgPoints = new uint16[](n_clients);
+        n_points = new uint16[](n_clients);
+        n_teachers = new uint16[](n_clients);
+    }
 
-		for(uint i = 0 ; i<numclient ; i++){
-			uint8 rank = 1 ;
-			for(uint j = 0 ; j<numclient ; j++){
-				if(avgdistarr[j]!=0){
-					if(avgdistarr[j]<avgdistarr[i]){
-						rank++ ; 
-					}
-				} 
-			}
-			rankarr[i] = rank ; 
-		}
-		reset();
-	}
+    function reset() public {
+        n_clientsVoted = 0;
+        for (uint16 i = 0; i < n_clients; i++) {
+            evalPoints[i] = 0;
+            justAvgPoints[i] = 0;
+            weightAvgPoints[i] = 0;
+            n_points[i] = 0;
+            n_teachers[i] = 0;
+        }
+    }
 
-	function upload(uint16[] memory avgdist) public {
-		n_clientsVoted++ ;
-		for (uint i = 0 ; i < numclient ; i++){
-			if(avgdist[i]!=0){
-				votearr[i]++ ;
-			}
-			avgdistarr[i] += avgdist[i] ; 
-		}
-		if (n_clientsVoted == numclient){
-			ranking();
-		}
-	}
+    function dist(uint16 x, uint16 y) private pure returns (uint16) {
+        if (x >= y) {
+            return x - y;
+        } else {
+            return y - x;
+        }
+    }
 
-	function see_rank() public view returns(uint[] memory){
-		return rankarr ; 
-	}
+    function ranking() public {
+        // 1. 최초 단순평균 구하기
+        uint8 i = 0;
+        uint8 j = 0;
 
+        for (i = 0; i < n_clients; i++) {
+            justAvgPoints[i] /= n_points[i]; //소수점 !!!!
+        }
 
-    //개별 ranking 산정 version 
-    // function ranking(uint8 clientIndex) returns(uint8) public{
-    //     uint8 rank = 1 ; 
-    //     for(uint i = 0 ; i<avgdistarr.length ; i++){
-    //         if(avgdistarr[i]!=0){
-    //             if(avgdistarr[i]<avgdistarr[clientIndex]){
-    //                 rank ++ ; 
-    //             }
-    //         }
-    //     }
-    //     return rank ; 
-    // }
+        // 2. weight 구하기
+        // weight = (evalPointSum-evalPoint) / evalPointSum
+        // since solidity has no float type and we need only ranking, instead of using weight, use evalPointSum-evalPoint
+        // uint16 evalPointSum = 0;
+        for (i = 0; i < n_clients; i++) {
+            for (j = 0; j < n_clients; j++) {
+                if (uploadedPoints[i][j] != 0) {
+                    evalPoints[i] += dist(
+                        uploadedPoints[i][j],
+                        justAvgPoints[j]
+                    );
+                }
+            }
+            evalPoints[i] /= n_teachers[i];
+            // evalPointSum += evalPoints[i];
+        }
 
+        // 3. 가중평균에 따른 ranking 구하기
+        for (i = 0; i < n_clients; i++) {
+            for (j = 0; j < n_clients; j++) {
+                if (uploadedPoints[i][j] != 0) {
+                    weightAvgPoints[j] += (uploadedPoints[i][j] /
+                        evalPoints[j]);
+                }
+            }
+        }
+
+        for (i = 0; i < n_clients; i++) {
+            rankArr[i] = 1;
+            for (j = 0; j < n_clients; j++) {
+                if (weightAvgPoints[j] < weightAvgPoints[i]) {
+                    rankArr[i]++;
+                }
+            }
+        }
+    }
+
+    function upload(uint16[] memory points) public {
+        require(n_clientsVoted < n_clients, "n_clientsVoted is over n_clients");
+        uploadedPoints[n_clientsVoted] = points;
+
+        for (uint8 i = 0; i < n_clients; i++) {
+            if (points[i] != 0) {
+                n_teachers[n_clientsVoted]++;
+                n_points[i]++;
+                justAvgPoints[i] += points[i];
+            }
+        }
+        n_clientsVoted++;
+        if (n_clientsVoted == n_clients) {
+            ranking();
+            reset();
+        }
+    }
+
+    function see_rank() public view returns (uint16[] memory) {
+        return rankArr;
+    }
 }

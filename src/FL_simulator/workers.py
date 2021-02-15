@@ -33,6 +33,7 @@ import client_train.client_functions as cf
 import torch
 import torch.nn as nn
 import time
+import matplotlib.pyplot as plt
 
 from smart_contract.smart_contract import SmartContract, smartContractMaker
 
@@ -82,12 +83,12 @@ def code_generator(clientIDs, n_rounds, n_teachers):
       code_sequence.append(code)
       n_end = 0
   
-  print(code_sequence)
+  # print(code_sequence)
   return code_sequence
 
     
 
-def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_process_per_gpu):
+def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_gpu_process):
   model_params = {clientID: None for clientID in clientIDs}
   test_results = {clientID: [] for clientID in clientIDs}
 
@@ -112,6 +113,7 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
     
     elif code['action'] == 'end':
       while True:
+        time.sleep(0.2)
         if not resultQs[code['client']].empty():
           msg = resultQs[code['client']].get()
           model_params[code['client']] = msg['updated_params']
@@ -121,15 +123,21 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
     elif code['action'] == 'round over':
       print('round over rank is {}'.format(smartContract.seerank_contract()))
   
-  for _ in range(n_process_per_gpu):
+  for _ in range(n_gpu_process):
     workQ.put({'train_method': 'done_training'})
     workQ.put({'train_method': 'done_training'})
-    print(test_results)
+
+  print(test_results)
+  fig = plt.figure()
+  for clientID in clientIDs:
+    plt.plot(test_results[clientID])
+  fig.savefig('../../result/testResult.png')
 
 
 
 
-def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, contractAddress, abi, device):
+
+def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, contractAddress, abi, device, batch_size):
 
   client_models = {clientID: client_model_types[clientID]().to(device) for clientID in clientIDs}
 
@@ -138,6 +146,7 @@ def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, 
   smartContract = SmartContract(clientIDs, contractAddress, abi)
 
   while not processDone:
+    time.sleep(0.2)
     if not workQ.empty():
       msg = workQ.get()
       if msg['train_method'] == 'KD_train':
@@ -150,7 +159,7 @@ def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, 
           teacher_model.load_state_dict({k: v.to(device) for k, v in msg['model_data']['teacher_clients'][teacherID].items()})
           teacher_models.append(teacher_model)
           teacherIDs.append(teacherID)
-        updated_params, test_result = cf.KD_trainNtest(clientIDs, client_model, msg['client'], clientLoaders[msg['client']], testLoader, teacherIDs, teacher_models, smartContract, device)
+        updated_params, test_result = cf.KD_trainNtest(clientIDs, client_model, msg['client'], clientLoaders[msg['client']], testLoader, teacherIDs, teacher_models, smartContract, device, batch_size)
         resultQs[msg['client']].put({'updated_params': updated_params, 'test_result': test_result})
 
       elif msg['train_method'] == 'local_train':

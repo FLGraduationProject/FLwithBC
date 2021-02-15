@@ -20,7 +20,7 @@ class SmartContract:
   def __init__(self, clientIDs, contractAddress, abi):
     self.numclient = len(clientIDs)
     ganache_url = "http://127.0.0.1:7545"
-    self.web3 = Web3(Web3.HTTPProvider(ganache_url, request_kwargs={'timeout': 60}))
+    self.web3 = Web3(Web3.HTTPProvider(ganache_url, request_kwargs={'timeout': 120}))
     accounts = self.web3.eth.accounts
     self.accounts = {clientIDs[i]: accounts[i] for i in range(len(clientIDs))}
     self.contract = self.web3.eth.contract(address=contractAddress, abi=abi)

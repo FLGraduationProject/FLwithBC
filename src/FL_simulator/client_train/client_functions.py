@@ -63,7 +63,7 @@ def local_trainNtest(client_model, clientID, dataLoader, testLoader, device, n_e
   return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('local train', clientID, client_model, testLoader, device)
 
 
-def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, teacherIDs, teacher_models, smartContract, device, n_epochs=1):
+def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, teacherIDs, teacher_models, smartContract, device, batch_size, n_epochs=2):
   student = client_model
   student.train()  # tells student to do training
 
@@ -73,7 +73,8 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
   distNum = {teacherID: 0 for teacherID in teacherIDs}
 
   ranking = smartContract.seerank_contract()
-  client_temperatures = {clientIDs[i]: 6-ranking[i] for i in range(len(clientIDs))}
+  client_alphas = {clientIDs[i]: (len(clientIDs)-ranking[i])/len(clientIDs) for i in range(len(clientIDs))}
+  client_temperatures = {clientIDs[i]: len(clientIDs)+1-ranking[i] for i in range(len(clientIDs))}
 
   for epoch in range(n_epochs):
 
@@ -92,12 +93,13 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
       # forward, backward, and opt
       outputs, teacher_outputs = student(image), teacher(image)
 
-      dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)
+      dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)/batch_size
       distSum[teacherID] += dist
       distNum[teacherID] += 1
-      # alpha = (math.sqrt(2) - dist)/math.sqrt(2)
+      alpha = client_alphas[teacherID]
+      # alpha = (math.sqrt(2) - dist/batch_size)/math.sqrt(2)
       temperature = client_temperatures[teacherID]
-      alpha = 0.9
+      # alpha = 0.9
       # temperature = 3
 
       loss = criterion_KD(outputs, label, teacher_outputs, alpha=alpha, temperature=temperature)
@@ -105,7 +107,7 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
       optimizer.step()
 
   # get average distance then send it through contract
-  distAvg = {teacherID: distSum[teacherID]/distNum[teacherID] for teacherID in teacherIDs}
+  distAvg = {teacherID: distSum[teacherID]/distNum[teacherID] if distNum[teacherID] != 0 else 0 for teacherID in teacherIDs}
   pointsArr = [int(distAvg[clientID]*1000) if clientID in teacherIDs else 0 for clientID in clientIDs]
   print(pointsArr)
   smartContract.upload_contract(clientID, pointsArr)

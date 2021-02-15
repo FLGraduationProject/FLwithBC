@@ -1,6 +1,9 @@
 # ignore data files
 data/
 
-#ignore pycache files
+# ignore pycache files
 src/__pycache__/
 src/data_loader/__pycache__/
+
+# ignore result files
+result/
