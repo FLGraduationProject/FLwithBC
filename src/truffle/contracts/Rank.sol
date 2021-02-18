@@ -1,118 +1,156 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.4.22 <0.9.0;
+pragma solidity >=0.5.1 <0.9.0;
+
+import "./heap.sol";
+import "./median_heap.sol";
 
 contract Rank {
-    // mapping(uint16 => uint16) public IdtoIndex;
-    // mapping(uint16 => uint16) public IndextoId;
+    // mapping(uint => uint) public IdtoIndex;
+    // mapping(uint => uint) public IndextoId;
+    using MinHeap for uint256;
+    using MaxHeap for uint256;
+    using MedianHeap for uint256;
 
-    uint8 n_clients;
-    uint8 n_clientsVoted;
+    uint256 n_clients;
+    uint256 n_clientsVoted;
 
-    uint16[][] uploadedPoints;
-    uint16[] evalPoints;
+    MedHeap[] points1;
+    MedHeap[] points2;
 
-    uint16[] justAvgPoints;
-    uint16[] weightAvgPoints;
-    uint16[] n_points;
-    uint16[] n_teachers;
-    uint16[] rankArr;
+    uint256[] medianPoints1;
+    uint256[] medianPoints2;
 
-    constructor(uint8 num_clients) public {
+    uint256[] points1Rank;
+    uint256[] points2Rank;
+
+    uint256[] rankArr1;
+    uint256[] rankArr2;
+
+    constructor(uint256 num_clients) public {
         n_clients = num_clients;
         n_clientsVoted = 0;
-        rankArr = new uint16[](n_clients);
-        uploadedPoints = new uint16[][](n_clients);
-        evalPoints = new uint16[](n_clients);
-        justAvgPoints = new uint16[](n_clients);
-        weightAvgPoints = new uint16[](n_clients);
-        n_points = new uint16[](n_clients);
-        n_teachers = new uint16[](n_clients);
+
+        for (uint256 i = 0; i < n_clients; i++) {
+            points1.push(
+                MedHeap(
+                    Heap(new uint256[](n_clients), 0),
+                    Heap(new uint256[](n_clients), 0)
+                )
+            );
+            points2.push(
+                MedHeap(
+                    Heap(new uint256[](n_clients), 0),
+                    Heap(new uint256[](n_clients), 0)
+                )
+            );
+        }
+
+        medianPoints1 = new uint256[](n_clients);
+        medianPoints2 = new uint256[](n_clients);
+
+        points1Rank = new uint256[](n_clients);
+        points2Rank = new uint256[](n_clients);
+
+
+        for (uint256 i = 0; i < n_clients; i++) {
+            rankArr1.push(i);
+        }
+        rankArr2 = new uint256[](n_clients);
     }
 
     function reset() public {
         n_clientsVoted = 0;
-        for (uint16 i = 0; i < n_clients; i++) {
-            evalPoints[i] = 0;
-            justAvgPoints[i] = 0;
-            weightAvgPoints[i] = 0;
-            n_points[i] = 0;
-            n_teachers[i] = 0;
+        for (uint256 i = 0; i < n_clients; i++) {
+            MedianHeap.reset(points1[i]);
+            MedianHeap.reset(points2[i]);
         }
     }
 
-    function dist(uint16 x, uint16 y) private pure returns (uint16) {
-        if (x >= y) {
-            return x - y;
-        } else {
-            return y - x;
+    function ranking() private {
+        for (uint256 i = 0; i < n_clients; i++) {
+            medianPoints1[i] = MedianHeap.get_median(points1[i]);
+            medianPoints2[i] = MedianHeap.get_median(points2[i]);
+        }
+        merge_sort(medianPoints1, 0, n_clients - 1);
+        for (uint256 i = 0; i < n_clients; i++) {
+            points1Rank[rankArr1[i]] = i + 1;
+        }
+
+        merge_sort(medianPoints2, 0, n_clients - 1);
+        for (uint256 i = 0; i < n_clients; i++) {
+            points2Rank[rankArr2[i]] = i + 1;
         }
     }
 
-    function ranking() public {
-        // 1. 최초 단순평균 구하기
-        uint8 i = 0;
-        uint8 j = 0;
-
-        for (i = 0; i < n_clients; i++) {
-            justAvgPoints[i] /= n_points[i]; //소수점 !!!!
-        }
-
-        // 2. weight 구하기
-        // weight = (evalPointSum-evalPoint) / evalPointSum
-        // since solidity has no float type and we need only ranking, instead of using weight, use evalPointSum-evalPoint
-        // uint16 evalPointSum = 0;
-        for (i = 0; i < n_clients; i++) {
-            for (j = 0; j < n_clients; j++) {
-                if (uploadedPoints[i][j] != 0) {
-                    evalPoints[i] += dist(
-                        uploadedPoints[i][j],
-                        justAvgPoints[j]
-                    );
-                }
-            }
-            evalPoints[i] /= n_teachers[i];
-            // evalPointSum += evalPoints[i];
-        }
-
-        // 3. 가중평균에 따른 ranking 구하기
-        for (i = 0; i < n_clients; i++) {
-            for (j = 0; j < n_clients; j++) {
-                if (uploadedPoints[i][j] != 0) {
-                    weightAvgPoints[j] += (uploadedPoints[i][j] /
-                        evalPoints[j]);
-                }
-            }
-        }
-
-        for (i = 0; i < n_clients; i++) {
-            rankArr[i] = 1;
-            for (j = 0; j < n_clients; j++) {
-                if (weightAvgPoints[j] < weightAvgPoints[i]) {
-                    rankArr[i]++;
-                }
-            }
-        }
-    }
-
-    function upload(uint16[] memory points) public {
+    function upload(uint256[] memory _points1, uint256[] memory _points2) public {
         require(n_clientsVoted < n_clients, "n_clientsVoted is over n_clients");
-        uploadedPoints[n_clientsVoted] = points;
+        n_clientsVoted++;
 
-        for (uint8 i = 0; i < n_clients; i++) {
-            if (points[i] != 0) {
-                n_teachers[n_clientsVoted]++;
-                n_points[i]++;
-                justAvgPoints[i] += points[i];
+        for (uint256 i = 0; i < n_clients; i++) {
+            if (_points1[i] != 0) {
+                MedianHeap.insert(points1[i], _points1[i]);
+                MedianHeap.insert(points2[i], _points2[i]);
             }
         }
-        n_clientsVoted++;
+
         if (n_clientsVoted == n_clients) {
             ranking();
             reset();
         }
     }
 
-    function see_rank() public view returns (uint16[] memory) {
-        return rankArr;
+    function seeRank1() public view returns (uint256[] memory) {
+        return points1Rank;
+    }
+
+    function seeRank2() public view returns (uint256[] memory) {
+        return points2Rank;
+    }
+
+    function merge(
+        uint256[] memory list,
+        uint256 left,
+        uint256 mid,
+        uint256 right
+    ) private {
+        uint256 i = left;
+        uint256 j = mid + 1;
+        uint256 k = left;
+
+        while (i <= mid && j <= right) {
+            if (list[rankArr1[i]] <= list[rankArr1[j]]) {
+                rankArr2[k++] = rankArr1[i++];
+            } else {
+                rankArr2[k++] = rankArr1[j++];
+            }
+        }
+
+        if (i > mid) {
+            for (uint256 l = j; l <= right; l++) {
+                rankArr2[k++] = rankArr1[l];
+            }
+        } else {
+            for (uint256 l = i; l <= mid; l++) {
+                rankArr2[k++] = rankArr1[l];
+            }
+        }
+
+        for (uint256 l = left; l <= right; l++) {
+            rankArr1[l] = rankArr2[l];
+        }
+    }
+
+    // sorts in increasing order
+    function merge_sort(
+        uint256[] memory list,
+        uint256 left,
+        uint256 right
+    ) private {
+        if (left < right) {
+            uint256 mid = (left + right) / 2;
+            merge_sort(list, left, mid);
+            merge_sort(list, mid + 1, right);
+            merge(list, left, mid, right);
+        }
     }
 }

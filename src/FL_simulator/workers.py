@@ -88,7 +88,7 @@ def code_generator(clientIDs, n_rounds, n_teachers):
 
     
 
-def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_gpu_process):
+def code_worker(code_sequence, clientIDs, workQ, resultQs, txQ, contractAddress, abi, n_gpu_process):
   model_params = {clientID: None for clientID in clientIDs}
   test_results = {clientID: [] for clientID in clientIDs}
 
@@ -114,6 +114,7 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
     elif code['action'] == 'end':
       while True:
         time.sleep(0.2)
+        # get result first
         if not resultQs[code['client']].empty():
           msg = resultQs[code['client']].get()
           model_params[code['client']] = msg['updated_params']
@@ -121,11 +122,13 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
           break
     
     elif code['action'] == 'round over':
-      print('round over rank is {}'.format(smartContract.seerank_contract()))
+      print('round over dist rank is {}'.format(smartContract.seeDistRank_tx()))
+      print('round over answer rank is {}'.format(smartContract.seeAnswerOnNthRank_tx()))
   
   for _ in range(n_gpu_process):
     workQ.put({'train_method': 'done_training'})
     workQ.put({'train_method': 'done_training'})
+    txQ.put({'status': 'done_training'})
 
   print(test_results)
   fig = plt.figure()
@@ -134,11 +137,24 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
   fig.savefig('../../result/testResult.png')
 
 
+def tx_worker(clientIDs, txQ, tx_resultQs, contractAddress, abi):
+  processDone = False
+
+  smartContract = SmartContract(clientIDs, contractAddress, abi)
+
+  while not processDone:
+    time.sleep(0.2)
+    if not txQ.empty():
+      msg = txQ.get()
+      if 'status' in msg.keys():
+        if msg['status'] == 'done_training':
+          processDone = True
+      else:
+        smartContract.upload_tx(msg['client'], msg['points'])
+        tx_resultQs[msg['client']].put({'status': 'success'})
 
 
-
-def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, resultQs, contractAddress, abi, device, batch_size):
-
+def gpu_worker(clientIDs, byzantines, client_model_types, clientLoaders, testLoader, workQ, resultQs, txQ, tx_resultQs, contractAddress, abi, device, batch_size):
   client_models = {clientID: client_model_types[clientID]().to(device) for clientID in clientIDs}
 
   processDone = False
@@ -159,12 +175,19 @@ def gpu_worker(clientIDs, client_model_types, clientLoaders, testLoader, workQ, 
           teacher_model.load_state_dict({k: v.to(device) for k, v in msg['model_data']['teacher_clients'][teacherID].items()})
           teacher_models.append(teacher_model)
           teacherIDs.append(teacherID)
-        updated_params, test_result = cf.KD_trainNtest(clientIDs, client_model, msg['client'], clientLoaders[msg['client']], testLoader, teacherIDs, teacher_models, smartContract, device, batch_size)
+        byzantine = (msg['client'] in byzantines)
+        updated_params, test_result, points = cf.KD_trainNtest(clientIDs, byzantine, client_model, msg['client'], clientLoaders[msg['client']], testLoader, teacherIDs, teacher_models, smartContract, device, batch_size)
+        txQ.put({'client': msg['client'], 'points': points})
+        while True:
+          time.sleep(0.2)
+          if not tx_resultQs[msg['client']].empty():
+            break
         resultQs[msg['client']].put({'updated_params': updated_params, 'test_result': test_result})
 
       elif msg['train_method'] == 'local_train':
         client_model = client_models[msg['client']]
-        updated_params, test_result = cf.local_trainNtest(client_model, msg['client'], clientLoaders[msg['client']], testLoader, device)
+        byzantine = (msg['client'] in byzantines)
+        updated_params, test_result = cf.local_trainNtest(client_model, byzantine, msg['client'], clientLoaders[msg['client']], testLoader, device)
         resultQs[msg['client']].put({'updated_params': updated_params, 'test_result': test_result})
 
       elif msg['train_method'] == 'done_training':

@@ -11,6 +11,5 @@ def criterion_KD(
     loss_KD = nn.KLDivLoss(reduction='batchmean')(
         F.log_softmax(outputs / temperature, dim=1),
         F.softmax(teacher_outputs / temperature, dim=1)
-    ) * (alpha * temperature * temperature) + \
-        F.cross_entropy(outputs, label) * (1. - alpha)
+    ) * (alpha * temperature * temperature) + F.cross_entropy(outputs, label) * (1. - alpha)
     return loss_KD

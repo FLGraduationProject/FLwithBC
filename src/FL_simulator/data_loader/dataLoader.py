@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from .get_data import get_mnist, get_cifar10, print_image_data_stats
 
 
-def split_non_iid(trainset, n_classes, partition, n_clients, classes_per_client, shuffle, verbose):
+def split_non_iid(trainset, n_classes, partition, n_clients, avg_classes_per_client, shuffle, verbose):
   class_inds = [torch.where(trainset.targets == class_idx)[0]
                       for class_idx in trainset.class_to_idx.values()]
   
@@ -17,11 +17,13 @@ def split_non_iid(trainset, n_classes, partition, n_clients, classes_per_client,
 
   data_inds_per_client = []
 
+  rand_weight = np.random.randint(10,100,size=n_clients)
+  classes_per_client = avg_classes_per_client/2 + (rand_weight/np.sum(rand_weight)*n_clients*avg_classes_per_client/2)
 
-  
+
   for i in range(n_clients):
-    client_classes = np.random.permutation(np.arange(n_classes))[:classes_per_client]
-    data_per_classes = int(data_per_client[i]/classes_per_client)
+    client_classes = np.random.permutation(np.arange(n_classes))[:int(classes_per_client[i])]
+    data_per_classes = int(data_per_client[i]/classes_per_client[i])
     
     data_inds = np.concatenate([np.random.permutation(class_inds[idx])[:data_per_classes] for idx in client_classes])
     np.random.shuffle(data_inds)

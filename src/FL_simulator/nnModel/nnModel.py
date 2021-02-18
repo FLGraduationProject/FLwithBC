@@ -11,7 +11,7 @@ class SimpleCNN(nn.Module):
     self.fc1 = nn.Linear(16 * 5 * 5, 120)
     self.fc2 = nn.Linear(120, 84)
     self.fc3 = nn.Linear(84, 10)
-    self.sm = nn.Softmax(dim=1)
+    self.bn1 = nn.BatchNorm1d()
 
   def forward(self, x):
     x = self.pool(F.relu(self.conv1(x)))
@@ -20,7 +20,7 @@ class SimpleCNN(nn.Module):
     x = F.relu(self.fc1(x))
     x = F.relu(self.fc2(x))
     x = self.fc3(x)
-    x = self.sm(x)
+    x = self.bn1(x)
     return x
 
 
@@ -32,7 +32,7 @@ class SimpleDNN(nn.Module):
       nn.Linear(28*28, 100),
       nn.ReLU(),
       nn.Linear(100, 10),
-      nn.Softmax(dim=1),
+      # nn.BatchNorm1d(10)
     )
 
   def forward(self, x):
@@ -49,7 +49,7 @@ class ComplexDNN(nn.Module):
       nn.Linear(100, 50),
       nn.ReLU(),
       nn.Linear(50, 10),
-      nn.Softmax(dim=1),
+      nn.BatchNorm1d(10)
     )
 
   def forward(self, x):

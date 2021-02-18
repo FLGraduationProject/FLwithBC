@@ -33,7 +33,7 @@ def test(train_type, clientID, client_model, testLoader, device):
 
     return 100. * correct / total
 
-def local_trainNtest(client_model, clientID, dataLoader, testLoader, device, n_epochs=1):
+def local_trainNtest(client_model, byzantine, clientID, dataLoader, testLoader, device, n_epochs=3):
   client_model.train()
   criterion = nn.CrossEntropyLoss()
   optimizer = torch.optim.SGD(client_model.parameters(), lr=0.01)
@@ -49,6 +49,9 @@ def local_trainNtest(client_model, clientID, dataLoader, testLoader, device, n_e
       image = image.to(device)
       label = label.to(device)
 
+      if byzantine:
+        label = 9 - label
+
       # Grad initialization
       optimizer.zero_grad()
       # Forward propagation
@@ -63,23 +66,31 @@ def local_trainNtest(client_model, clientID, dataLoader, testLoader, device, n_e
   return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('local train', clientID, client_model, testLoader, device)
 
 
-def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, teacherIDs, teacher_models, smartContract, device, batch_size, n_epochs=2):
+def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, testLoader, teacherIDs, teacher_models, smartContract, device, batch_size, n_epochs=1):
   student = client_model
   student.train()  # tells student to do training
 
   optimizer = torch.optim.SGD(client_model.parameters(), lr=0.01)
 
-  distSum = {teacherID: 0 for teacherID in teacherIDs}
-  distNum = {teacherID: 0 for teacherID in teacherIDs}
+  n_teacher_selected = {teacherID: 0 for teacherID in teacherIDs}
 
-  ranking = smartContract.seerank_contract()
-  client_alphas = {clientIDs[i]: (len(clientIDs)-ranking[i])/len(clientIDs) for i in range(len(clientIDs))}
-  client_temperatures = {clientIDs[i]: len(clientIDs)+1-ranking[i] for i in range(len(clientIDs))}
+  distSum = {teacherID: 0 for teacherID in teacherIDs}
+
+  cosSimPointSum = {teacherID: 0 for teacherID in teacherIDs}
+
+  # high rank is better
+  distRank = smartContract.seeDistRank_tx()
+  cosSimRank = smartContract.seeAnswerOnNthRank_tx()
+  
+  n_clients = len(clientIDs)
+  client_alphas = {clientIDs[i]: (n_clients - distRank[i])/n_clients if distRank[i] != 0 else 0.9 for i in range(len(clientIDs))}
+  client_temperatures = {clientIDs[i]: (n_clients - cosSimRank[i])/n_clients*3 + 3 if cosSimRank[i] != 0 else 3 for i in range(len(clientIDs))}
 
   for epoch in range(n_epochs):
 
     for batch_idx, data in enumerate(dataLoader):
       image, label = data
+      nowBatchSize = len(label)
 
       image = image.to(device)
       label = label.to(device)
@@ -93,23 +104,37 @@ def KD_trainNtest(clientIDs, client_model, clientID, dataLoader, testLoader, tea
       # forward, backward, and opt
       outputs, teacher_outputs = student(image), teacher(image)
 
-      dist = torch.norm(F.one_hot(label, num_classes=10)-teacher_outputs)/batch_size
-      distSum[teacherID] += dist
-      distNum[teacherID] += 1
-      alpha = client_alphas[teacherID]
+      if byzantine:
+        label = 9 - label
+        teacher_outputs = -teacher_outputs
+
+      n_teacher_selected[teacherID] += 1
+
+      dist = F.cross_entropy(teacher_outputs, label)
+      distSum[teacherID] += dist/nowBatchSize
+
+      cosSimPoint = 2- torch.mean(F.cosine_similarity(outputs, teacher_outputs))
+      cosSimPointSum[teacherID] += cosSimPoint
+
       # alpha = (math.sqrt(2) - dist/batch_size)/math.sqrt(2)
-      temperature = client_temperatures[teacherID]
+      alpha = client_alphas[teacherID]
+      temperature = client_temperatures[clientID]
       # alpha = 0.9
       # temperature = 3
+      if byzantine:
+        alpha = 0.9
+        temperature = 3
 
       loss = criterion_KD(outputs, label, teacher_outputs, alpha=alpha, temperature=temperature)
       loss.backward()
       optimizer.step()
 
   # get average distance then send it through contract
-  distAvg = {teacherID: distSum[teacherID]/distNum[teacherID] if distNum[teacherID] != 0 else 0 for teacherID in teacherIDs}
-  pointsArr = [int(distAvg[clientID]*1000) if clientID in teacherIDs else 0 for clientID in clientIDs]
-  print(pointsArr)
-  smartContract.upload_contract(clientID, pointsArr)
+  distAvg = {teacherID: distSum[teacherID]/n_teacher_selected[teacherID] if n_teacher_selected[teacherID] != 0 else 0 for teacherID in teacherIDs}
+  distPoints = [int(distAvg[clientID]*10000) if clientID in teacherIDs else 0 for clientID in clientIDs]
 
-  return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('KD train', clientID, client_model, testLoader, device)
+  cosSimPointAvg = {teacherID: cosSimPointSum[teacherID]/n_teacher_selected[teacherID] if n_teacher_selected[teacherID] != 0 else 0 for teacherID in teacherIDs}
+  cosSimPoints = [int(cosSimPointAvg[clientID]*1000) if clientID in teacherIDs else 0 for clientID in clientIDs]
+
+
+  return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('KD train', clientID, client_model, testLoader, device), (distPoints, cosSimPoints)
