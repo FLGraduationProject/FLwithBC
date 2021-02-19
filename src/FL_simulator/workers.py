@@ -122,8 +122,8 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, txQ, contractAddress,
           break
     
     elif code['action'] == 'round over':
-      print('round over dist rank is {}'.format(smartContract.seeDistRank_tx()))
-      print('round over answer rank is {}'.format(smartContract.seeAnswerOnNthRank_tx()))
+      print('round over dist rank is {}'.format(smartContract.seeRank1_call()))
+      # print('round over answer rank is {}'.format(smartContract.seeAnswerOnNthRank_tx()))
   
   for _ in range(n_gpu_process):
     workQ.put({'train_method': 'done_training'})

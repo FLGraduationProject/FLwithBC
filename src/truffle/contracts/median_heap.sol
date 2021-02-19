@@ -12,12 +12,12 @@ library MedianHeap {
     using MinHeap for uint256;
     using MaxHeap for uint256;
 
-    function reset(MedHeap storage heap) external {
+    function reset(MedHeap storage heap) internal {
         heap.maxHeap.size = 0;
         heap.minHeap.size = 0;
     }
 
-    function insert(MedHeap storage heap, uint256 value) external {
+    function insert(MedHeap storage heap, uint256 value) internal {
         if (heap.maxHeap.size == 0) {
             MaxHeap.insert(heap.maxHeap, value);
         } else {
@@ -39,7 +39,7 @@ library MedianHeap {
         }
     }
 
-    function get_median(MedHeap storage heap) external view returns (uint256) {
+    function get_median(MedHeap storage heap) internal view returns (uint256) {
         return MaxHeap.top(heap.maxHeap);
     }
 }

@@ -31,6 +31,7 @@ parser.add_argument('--n_process_per_gpu', type=int, default=3)
 
 if __name__ == '__main__':
   mp.set_start_method('spawn')
+  n_devices = 1
   
   if torch.cuda.is_available():
     n_devices = torch.cuda.device_count()
@@ -41,7 +42,7 @@ if __name__ == '__main__':
     print('gpu 개수:', n_devices)
     print('graphic name:', [torch.cuda.get_device_name(device) for device in devices])
   else:
-    device = torch.device('cpu')
+    devices = [torch.device('cpu')]
     cuda = False
     print('학습을 진행하는 기기: CPU')
 

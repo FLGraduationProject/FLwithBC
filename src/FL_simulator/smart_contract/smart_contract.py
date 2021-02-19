@@ -28,12 +28,10 @@ class SmartContract:
   def upload_tx(self, clientID, points):
     distPoints, answerOnNthPoints = points
     print(clientID, distPoints, answerOnNthPoints)
-    tx_hash = self.contract.functions.upload(distPoints, answerOnNthPoints).transact({'from':self.accounts[clientID]})
+    tx_hash = self.contract.functions.upload(distPoints).transact({'from':self.accounts[clientID]})
     self.web3.eth.waitForTransactionReceipt(tx_hash)
     print("upload_contract by client : {}".format(clientID))
 
   def seeRank1_call(self):
-    return self.contract.functions.seeRank1().call()
-  
-  def seeRank2_call(self):
-    return self.contract.functions.seeRank2().call()
+    medianPoints = self.contract.functions.seeMedianPoints1().call()
+    return sorted(range(len(medianPoints)), key=lambda k: medianPoints[k])

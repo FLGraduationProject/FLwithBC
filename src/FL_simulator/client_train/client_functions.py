@@ -79,12 +79,12 @@ def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, test
   cosSimPointSum = {teacherID: 0 for teacherID in teacherIDs}
 
   # high rank is better
-  distRank = smartContract.seeDistRank_tx()
-  cosSimRank = smartContract.seeAnswerOnNthRank_tx()
+  distRank = smartContract.seeRank1_call()
+  # cosSimRank = smartContract.seeRank1_call()
   
   n_clients = len(clientIDs)
   client_alphas = {clientIDs[i]: (n_clients - distRank[i])/n_clients if distRank[i] != 0 else 0.9 for i in range(len(clientIDs))}
-  client_temperatures = {clientIDs[i]: (n_clients - cosSimRank[i])/n_clients*3 + 3 if cosSimRank[i] != 0 else 3 for i in range(len(clientIDs))}
+  # client_temperatures = {clientIDs[i]: (n_clients - cosSimRank[i])/n_clients*3 + 3 if cosSimRank[i] != 0 else 3 for i in range(len(clientIDs))}
 
   for epoch in range(n_epochs):
 
@@ -113,14 +113,14 @@ def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, test
       dist = F.cross_entropy(teacher_outputs, label)
       distSum[teacherID] += dist/nowBatchSize
 
-      cosSimPoint = 2- torch.mean(F.cosine_similarity(outputs, teacher_outputs))
-      cosSimPointSum[teacherID] += cosSimPoint
+      # cosSimPoint = 2- torch.mean(F.cosine_similarity(outputs, teacher_outputs))
+      # cosSimPointSum[teacherID] += cosSimPoint
 
       # alpha = (math.sqrt(2) - dist/batch_size)/math.sqrt(2)
       alpha = client_alphas[teacherID]
-      temperature = client_temperatures[clientID]
+      # temperature = client_temperatures[clientID]
       # alpha = 0.9
-      # temperature = 3
+      temperature = 3
       if byzantine:
         alpha = 0.9
         temperature = 3
@@ -133,8 +133,8 @@ def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, test
   distAvg = {teacherID: distSum[teacherID]/n_teacher_selected[teacherID] if n_teacher_selected[teacherID] != 0 else 0 for teacherID in teacherIDs}
   distPoints = [int(distAvg[clientID]*10000) if clientID in teacherIDs else 0 for clientID in clientIDs]
 
-  cosSimPointAvg = {teacherID: cosSimPointSum[teacherID]/n_teacher_selected[teacherID] if n_teacher_selected[teacherID] != 0 else 0 for teacherID in teacherIDs}
-  cosSimPoints = [int(cosSimPointAvg[clientID]*1000) if clientID in teacherIDs else 0 for clientID in clientIDs]
+  # cosSimPointAvg = {teacherID: cosSimPointSum[teacherID]/n_teacher_selected[teacherID] if n_teacher_selected[teacherID] != 0 else 0 for teacherID in teacherIDs}
+  # cosSimPoints = [int(cosSimPointAvg[clientID]*1000) if clientID in teacherIDs else 0 for clientID in clientIDs]
 
 
   return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('KD train', clientID, client_model, testLoader, device), (distPoints, cosSimPoints)
