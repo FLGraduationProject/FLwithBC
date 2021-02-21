@@ -18,14 +18,14 @@ import torch.multiprocessing as mp
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_clients', type=int, default=10, help='')
+parser.add_argument('--n_clients', type=int, default=5, help='')
 parser.add_argument('--batch_size', type=int, default=20, help='')
 parser.add_argument('--model_type', type=nn.Module, default=SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--n_classes', type=int, default=10)
 parser.add_argument('--n_KD_train', type=int, default=5)
-parser.add_argument('--n_teachers', type=int, default=9)
+parser.add_argument('--n_teachers', type=int, default=4)
 parser.add_argument('--n_process_per_gpu', type=int, default=3)
 
 

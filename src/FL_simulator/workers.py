@@ -122,7 +122,7 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, txQ, contractAddress,
           break
     
     elif code['action'] == 'round over':
-      print('round over dist rank is {}'.format(smartContract.seeRank1_call()))
+      print('round over dist rank is {}'.format(smartContract.getWholeRank()))
       # print('round over answer rank is {}'.format(smartContract.seeAnswerOnNthRank_tx()))
   
   for _ in range(n_gpu_process):
@@ -150,7 +150,7 @@ def tx_worker(clientIDs, txQ, tx_resultQs, contractAddress, abi):
         if msg['status'] == 'done_training':
           processDone = True
       else:
-        smartContract.upload_tx(msg['client'], msg['points'])
+        smartContract.upload_tx(msg['client'], msg['uploadData'])
         tx_resultQs[msg['client']].put({'status': 'success'})
 
 
@@ -176,12 +176,7 @@ def gpu_worker(clientIDs, byzantines, client_model_types, clientLoaders, testLoa
           teacher_models.append(teacher_model)
           teacherIDs.append(teacherID)
         byzantine = (msg['client'] in byzantines)
-        updated_params, test_result, points = cf.KD_trainNtest(clientIDs, byzantine, client_model, msg['client'], clientLoaders[msg['client']], testLoader, teacherIDs, teacher_models, smartContract, device, batch_size)
-        txQ.put({'client': msg['client'], 'points': points})
-        while True:
-          time.sleep(0.2)
-          if not tx_resultQs[msg['client']].empty():
-            break
+        updated_params, test_result = cf.KD_trainNtest(clientIDs, byzantine, client_model, msg['client'], clientLoaders[msg['client']], testLoader, teacherIDs, teacher_models, smartContract, device, batch_size)
         resultQs[msg['client']].put({'updated_params': updated_params, 'test_result': test_result})
 
       elif msg['train_method'] == 'local_train':
