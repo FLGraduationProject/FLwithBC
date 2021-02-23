@@ -11,14 +11,14 @@ contract PointsBoard {
     using MaxHeap for uint256;
     using MedianHeap for uint256;
 
-    uint256 n_clients;
+    uint256 maxHeapSize;
 
     mapping(address => MedHeap) pointsHeap;
     mapping(address => uint256) medianPoints;
     mapping(address => bool) heapMade;
     
-    constructor(uint256 numClients) public {
-        n_clients = numClients;
+    constructor(uint256 maxSize) public {
+        maxHeapSize = maxSize;
     }
 
     // instead of rounds, how about getting the median of the last n votes?
@@ -28,10 +28,10 @@ contract PointsBoard {
         for (uint256 i = 0; i < teachers.length; i++) {
             if (!heapMade[teachers[i]]){
                 heapMade[teachers[i]] = true;
-                pointsHeap[teachers[i]].maxHeap.data = new address[](n_clients);
-                pointsHeap[teachers[i]].minHeap.data = new address[](n_clients);
+                pointsHeap[teachers[i]].maxHeap.data = new address[](maxHeapSize);
+                pointsHeap[teachers[i]].minHeap.data = new address[](maxHeapSize);
+                pointsHeap[teachers[i]].maxHeapSize = maxHeapSize;
             }
-            MedianHeap.remove(pointsHeap[teachers[i]], senderAddr);
             pointsHeap[teachers[i]].values[senderAddr] = points[i];
             MedianHeap.insert(pointsHeap[teachers[i]], senderAddr);
         }

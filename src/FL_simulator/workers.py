@@ -57,8 +57,8 @@ def code_generator(clientIDs, n_rounds, n_teachers):
     for j in range(len(clientIDs)):
       train_sequence.append(j)
   
-  # # make a shuffled train_sequence of clients
-  # train_sequence = np.random.permutation(np.array(train_sequence))
+  # make a shuffled train_sequence of clients
+  train_sequence = np.random.permutation(np.array(train_sequence))
   
   # as clients appear, assign them switching start/end
   # make them into code format
@@ -78,7 +78,7 @@ def code_generator(clientIDs, n_rounds, n_teachers):
 
     code_sequence.append(code)
 
-    if n_end == len(clientIDs):
+    if n_end == 5:
       code = {'action': 'round over'}
       code_sequence.append(code)
       n_end = 0
@@ -88,11 +88,13 @@ def code_generator(clientIDs, n_rounds, n_teachers):
 
     
 
-def code_worker(code_sequence, clientIDs, workQ, resultQs, txQ, contractAddress, abi, n_gpu_process):
+def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_gpu_process):
   model_params = {clientID: None for clientID in clientIDs}
-  test_results = {clientID: [] for clientID in clientIDs}
+  test_results = {clientID: {'test_result': [], 'roundNum': []} for clientID in clientIDs}
 
   smartContract = SmartContract(clientIDs, contractAddress, abi)
+
+  roundNum = 0
 
   for code in code_sequence:
     if code['action'] == 'start':
@@ -118,44 +120,27 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, txQ, contractAddress,
         if not resultQs[code['client']].empty():
           msg = resultQs[code['client']].get()
           model_params[code['client']] = msg['updated_params']
-          test_results[code['client']].append(msg['test_result'])
+          test_results[code['client']]['test_result'].append(msg['test_result'])
+          test_results[code['client']]['roundNum'].append(roundNum)
           break
     
     elif code['action'] == 'round over':
-      print('round over dist rank is {}'.format(smartContract.getWholeRank()))
-      # print('round over answer rank is {}'.format(smartContract.seeAnswerOnNthRank_tx()))
+      roundNum += 1
+      print('round {} over'.format(roundNum))
+      if roundNum % 4 == 0:
+        fig = plt.figure()
+        for clientID in clientIDs:
+          plt.plot(test_results[clientID]['roundNum'], test_results[clientID]['test_result'])
+        fig.savefig('../../result/testResult.png')
+        plt.close(fig)
   
   for _ in range(n_gpu_process):
     workQ.put({'train_method': 'done_training'})
     workQ.put({'train_method': 'done_training'})
-    txQ.put({'status': 'done_training'})
-
-  print(test_results)
-  fig = plt.figure()
-  for clientID in clientIDs:
-    plt.plot(test_results[clientID])
-  fig.savefig('../../result/testResult.png')
 
 
-def tx_worker(clientIDs, txQ, tx_resultQs, contractAddress, abi):
-  processDone = False
-
-  smartContract = SmartContract(clientIDs, contractAddress, abi)
-
-  while not processDone:
-    time.sleep(0.2)
-    if not txQ.empty():
-      msg = txQ.get()
-      if 'status' in msg.keys():
-        if msg['status'] == 'done_training':
-          processDone = True
-      else:
-        smartContract.upload_tx(msg['client'], msg['uploadData'])
-        tx_resultQs[msg['client']].put({'status': 'success'})
-
-
-def gpu_worker(clientIDs, byzantines, client_model_types, clientLoaders, testLoader, workQ, resultQs, txQ, tx_resultQs, contractAddress, abi, device, batch_size):
-  client_models = {clientID: client_model_types[clientID]().to(device) for clientID in clientIDs}
+def gpu_worker(clientIDs, byzantines, client_models, clientLoaders, testLoader, workQ, resultQs, tx_resultQs, contractAddress, abi, device, batch_size):
+  client_models = {clientID: client_models[clientID].to(device) for clientID in clientIDs}
 
   processDone = False
 

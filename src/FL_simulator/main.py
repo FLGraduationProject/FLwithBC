@@ -7,7 +7,7 @@ from torchvision import transforms
 import torch.nn as nn
 import numpy as np
 
-from nnModel.nnModel import *
+from nets.nets import *
 from data_loader.dataLoader import get_data_loaders
 import workers as work
 from smart_contract.smart_contract import SmartContract, smartContractMaker
@@ -19,14 +19,14 @@ import torch.multiprocessing as mp
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_clients', type=int, default=5, help='')
-parser.add_argument('--batch_size', type=int, default=20, help='')
-parser.add_argument('--model_type', type=nn.Module, default=SimpleDNN)
+parser.add_argument('--batch_size', type=int, default=1, help='')
+parser.add_argument('--model_type', type=nn.Module, default=vgg11)
 parser.add_argument('--n_local_epochs', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--n_classes', type=int, default=10)
 parser.add_argument('--n_KD_train', type=int, default=5)
 parser.add_argument('--n_teachers', type=int, default=4)
-parser.add_argument('--n_process_per_gpu', type=int, default=3)
+parser.add_argument('--n_process_per_gpu', type=int, default=1)
 
 
 if __name__ == '__main__':
@@ -52,10 +52,10 @@ if __name__ == '__main__':
   clientIDs = ['client-{}'.format(i) for i in range(args.n_clients)]
 
   # choose model types for each client
-  client_model_types = {clientID: args.model_type for clientID in clientIDs}
+  client_models = {clientID: args.model_type(num_classes=10) for clientID in clientIDs}
 
   # make data loaders for each clients train data and universal test set
-  dataLoaders, testLoader = get_data_loaders(args.n_classes, 0.2, args.n_clients, 7, args.batch_size)
+  dataLoaders, testLoader = get_data_loaders(args.n_classes, 1, args.n_clients, 7, args.batch_size)
   clientLoaders = {clientIDs[i]: dataLoaders[i] for i in range(args.n_clients)}
 
   # make asynchronous code sequence for this simulation
@@ -68,17 +68,13 @@ if __name__ == '__main__':
   resultQs = {clientID: mp.Queue() for clientID in clientIDs}
 
   # Smart Contract for ranking avg distance
-  contractAddress, abi = smartContractMaker(clientIDs)
+  contractAddress, abi = smartContractMaker(clientIDs, int(args.n_clients*0.5))
 
-  byzantines = []
+  byzantines = [clientIDs[0]]
 
   # process for executing the code sequence generated from code generator
   processes = []
-  p = mp.Process(target=work.code_worker, args=(code_sequence, clientIDs, workQ, resultQs, txQ, contractAddress, abi, n_devices*args.n_process_per_gpu))
-  p.start()
-  processes.append(p)
-
-  p = mp.Process(target=work.tx_worker, args=(clientIDs, txQ, tx_resultQs, contractAddress, abi))
+  p = mp.Process(target=work.code_worker, args=(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_devices*args.n_process_per_gpu))
   p.start()
   processes.append(p)
 
@@ -86,7 +82,7 @@ if __name__ == '__main__':
     print(devices[i], torch.cuda.get_device_name(devices[i]))
     for _ in range(args.n_process_per_gpu):
       # process for training the client on the gpu
-      p = mp.Process(target=work.gpu_worker, args=(clientIDs, byzantines, client_model_types, clientLoaders, testLoader, workQ, resultQs, txQ, tx_resultQs, contractAddress, abi, devices[i], args.batch_size))
+      p = mp.Process(target=work.gpu_worker, args=(clientIDs, byzantines, client_models, clientLoaders, testLoader, workQ, resultQs, tx_resultQs, contractAddress, abi, devices[i], args.batch_size))
       p.start()
       processes.append(p)
   

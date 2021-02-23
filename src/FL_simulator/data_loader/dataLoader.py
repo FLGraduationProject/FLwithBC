@@ -9,7 +9,7 @@ from .get_data import get_mnist, get_cifar10, print_image_data_stats
 
 
 def split_non_iid(trainset, n_classes, partition, n_clients, avg_classes_per_client, shuffle, verbose):
-  class_inds = [torch.where(trainset.targets == class_idx)[0]
+  class_inds = [torch.where(torch.tensor(trainset.targets) == class_idx)[0]
                       for class_idx in trainset.class_to_idx.values()]
   
   rand_weight = np.random.randint(10,100,size=n_clients)
@@ -36,7 +36,7 @@ def split_non_iid(trainset, n_classes, partition, n_clients, avg_classes_per_cli
 
 def get_data_loaders(n_classes, partition, n_clients, classes_per_client, batch_size, shuffle=True, verbose=True):
   
-  trainset, testset = get_mnist()
+  trainset, testset = get_cifar10()
   
   split_inds = split_non_iid(trainset, n_classes, partition, n_clients, classes_per_client, shuffle, verbose)
   

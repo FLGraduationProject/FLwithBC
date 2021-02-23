@@ -1,6 +1,13 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
+import torchvision.models as models
+
+def vgg11(**params):
+    return models.vgg11(**params)
+
+def resnet18(**params):
+    return models.resnet18(**params)
 
 class SimpleCNN(nn.Module):
   def __init__(self):

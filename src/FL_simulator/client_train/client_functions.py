@@ -33,7 +33,7 @@ def test(train_type, clientID, client_model, testLoader, device):
 
     return 100. * correct / total
 
-def local_trainNtest(client_model, byzantine, clientID, dataLoader, testLoader, device, n_epochs=3):
+def local_trainNtest(client_model, byzantine, clientID, dataLoader, testLoader, device, n_epochs=1):
   client_model.train()
   criterion = nn.CrossEntropyLoss()
   optimizer = torch.optim.SGD(client_model.parameters(), lr=0.01)
@@ -66,7 +66,7 @@ def local_trainNtest(client_model, byzantine, clientID, dataLoader, testLoader, 
   return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('local train', clientID, client_model, testLoader, device)
 
 
-def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, testLoader, teacherIDs, teacher_models, smartContract, device, batch_size, n_epochs=1):
+def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, testLoader, teacherIDs, teacher_models, smartContract, device, batch_size, n_epochs=3):
   student = client_model
   student.train()  # tells student to do training
 
