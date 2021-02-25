@@ -38,7 +38,7 @@ import matplotlib.pyplot as plt
 from smart_contract.smart_contract import SmartContract, smartContractMaker
 
 
-def code_generator(clientIDs, n_rounds, n_teachers):
+def code_generator(clientIDs, duration, n_teachers):
   code_sequence = []
   # start local train all clients first
   for clientID in clientIDs:
@@ -48,24 +48,57 @@ def code_generator(clientIDs, n_rounds, n_teachers):
   for clientID in clientIDs:
     code_sequence.append({'action': 'end', 'client': clientID})
 
-  # # choose number of KD_train per client
-  # n_train_per_clients = np.random.randint((max_n_KD_train+1), size=len(clientIDs))
-  # print(n_train_per_clients)
+  n_clients = len(clientIDs)
+
+  # choose training speed per client
+  training_time = np.random.randint(5, 10, size=n_clients)
+  resting_time = np.random.randint(5, 10, size=n_clients)
+  print(training_time)
+  print(resting_time)
 
   train_sequence = []
-  for i in range(2*n_rounds):
-    for j in range(len(clientIDs)):
-      train_sequence.append(j)
+
+  status = ['rest' for _ in range(n_clients)]
+  lasting = [0 for _ in range(n_clients)]
+
+  trainStartEnd = [[] for _ in range(n_clients)]
+
+  for dur in range(duration):
+    for idx in range(n_clients):
+      lasting[idx] += 1
+      if status[idx] == 'rest':
+        if lasting[idx] % resting_time[idx] == 0:
+          lasting[idx] = 0
+          status[idx] = 'train'
+          train_sequence.append(idx)
+          trainStartEnd[idx].append([dur])
+
+      elif status[idx] == 'train':
+        if lasting[idx] % training_time[idx] == 0:
+          lasting[idx] = 0
+          status[idx] = 'rest'
+          train_sequence.append(idx)
+          trainStartEnd[idx][-1].append(dur)
+    
+    # -1 means unit time
+    train_sequence.append(-1)
   
-  # make a shuffled train_sequence of clients
-  train_sequence = np.random.permutation(np.array(train_sequence))
+  fig = plt.figure()
+  for idx in range(n_clients):
+    for train in range(len(trainStartEnd[idx])):
+      if len(trainStartEnd[idx][train]) == 2:
+        plt.plot(trainStartEnd[idx][train], [idx,idx])
+  fig.savefig('../../result/train_schedule.png')
+  plt.close(fig)
   
   # as clients appear, assign them switching start/end
   # make them into code format
-  started = [False for _ in range(len(clientIDs))]
-  n_end = 0
+  started = [False for _ in range(n_clients)]
   for client_idx in train_sequence:
-    if not started[client_idx]:
+    if client_idx == -1:
+      code = {'action': 'unit time'}
+
+    elif not started[client_idx]:
       started[client_idx] = True
       idx_teachers = np.random.permutation(np.delete(np.arange(len(clientIDs)), client_idx))[:n_teachers]
       teachers = [clientIDs[idx] for idx in idx_teachers]
@@ -74,27 +107,20 @@ def code_generator(clientIDs, n_rounds, n_teachers):
     else:
       started[client_idx] = False
       code = {'action': 'end', 'client': clientIDs[client_idx]}
-      n_end += 1
 
     code_sequence.append(code)
 
-    if n_end == 5:
-      code = {'action': 'round over'}
-      code_sequence.append(code)
-      n_end = 0
-  
-  # print(code_sequence)
   return code_sequence
 
     
 
 def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_gpu_process):
   model_params = {clientID: None for clientID in clientIDs}
-  test_results = {clientID: {'test_result': [], 'roundNum': []} for clientID in clientIDs}
+  test_results = {clientID: {'test_result': [], 'time': []} for clientID in clientIDs}
 
   smartContract = SmartContract(clientIDs, contractAddress, abi)
 
-  roundNum = 0
+  duration = 0
 
   for code in code_sequence:
     if code['action'] == 'start':
@@ -121,16 +147,15 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
           msg = resultQs[code['client']].get()
           model_params[code['client']] = msg['updated_params']
           test_results[code['client']]['test_result'].append(msg['test_result'])
-          test_results[code['client']]['roundNum'].append(roundNum)
+          test_results[code['client']]['time'].append(duration)
           break
     
-    elif code['action'] == 'round over':
-      roundNum += 1
-      print('round {} over'.format(roundNum))
-      if roundNum % 4 == 0:
+    elif code['action'] == 'unit time':
+      duration += 1
+      if duration % 40 == 0:
         fig = plt.figure()
         for clientID in clientIDs:
-          plt.plot(test_results[clientID]['roundNum'], test_results[clientID]['test_result'])
+          plt.plot(test_results[clientID]['time'], test_results[clientID]['test_result'], marker='o', linestyle='--')
         fig.savefig('../../result/testResult.png')
         plt.close(fig)
   

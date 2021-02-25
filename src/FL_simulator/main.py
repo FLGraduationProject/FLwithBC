@@ -19,12 +19,12 @@ import torch.multiprocessing as mp
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_clients', type=int, default=5, help='')
-parser.add_argument('--batch_size', type=int, default=1, help='')
-parser.add_argument('--model_type', type=nn.Module, default=vgg11)
+parser.add_argument('--batch_size', type=int, default=10, help='')
+parser.add_argument('--model_type', type=nn.Module, default=SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--n_classes', type=int, default=10)
-parser.add_argument('--n_KD_train', type=int, default=5)
+parser.add_argument('--duration', type=int, default=10)
 parser.add_argument('--n_teachers', type=int, default=4)
 parser.add_argument('--n_process_per_gpu', type=int, default=1)
 
@@ -52,14 +52,14 @@ if __name__ == '__main__':
   clientIDs = ['client-{}'.format(i) for i in range(args.n_clients)]
 
   # choose model types for each client
-  client_models = {clientID: args.model_type(num_classes=10) for clientID in clientIDs}
+  client_models = {clientID: args.model_type() for clientID in clientIDs}
 
   # make data loaders for each clients train data and universal test set
   dataLoaders, testLoader = get_data_loaders(args.n_classes, 1, args.n_clients, 7, args.batch_size)
   clientLoaders = {clientIDs[i]: dataLoaders[i] for i in range(args.n_clients)}
 
   # make asynchronous code sequence for this simulation
-  code_sequence = work.code_generator(clientIDs, args.n_KD_train, args.n_teachers)
+  code_sequence = work.code_generator(clientIDs, args.duration, args.n_teachers)
   
   # Queues for multi processing between code worker and gpu worker
   workQ = mp.Queue()
