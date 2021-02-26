@@ -34,6 +34,7 @@ import torch
 import torch.nn as nn
 import time
 import matplotlib.pyplot as plt
+import copy
 
 from smart_contract.smart_contract import SmartContract, smartContractMaker
 
@@ -69,7 +70,9 @@ def code_generator(clientIDs, duration, n_teachers):
           lasting[idx] = 0
           status[idx] = 'rest'
           trainStartEndBlock[idx][1] = dur
-          trainStartEnd[idx].append(trainStartEndBlock[idx])
+          trainStartEnd[idx].append(copy.deepcopy(trainStartEndBlock[idx]))
+  
+  print(trainStartEnd)
   
   fig = plt.figure()
   for idx in range(n_clients):

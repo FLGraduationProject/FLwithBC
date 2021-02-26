@@ -26,7 +26,7 @@ def split_non_iid(trainset, n_classes, partition, n_clients):
     np.random.shuffle(data_inds)
 
     data_inds_per_client.append(data_inds)
-    plt.plot(data_per_classes)
+    plt.plot(data_per_classes, marker='o', linestyle='--')
   
   fig.savefig('../../result/data_distribution.png')
   plt.close(fig)
