@@ -24,7 +24,7 @@ parser.add_argument('--model_type', type=nn.Module, default=SimpleDNN)
 parser.add_argument('--n_local_epochs', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--n_classes', type=int, default=10)
-parser.add_argument('--duration', type=int, default=10)
+parser.add_argument('--duration', type=int, default=40)
 parser.add_argument('--n_teachers', type=int, default=4)
 parser.add_argument('--n_process_per_gpu', type=int, default=1)
 
@@ -55,7 +55,7 @@ if __name__ == '__main__':
   client_models = {clientID: args.model_type() for clientID in clientIDs}
 
   # make data loaders for each clients train data and universal test set
-  dataLoaders, testLoader = get_data_loaders(args.n_classes, 1, args.n_clients, 7, args.batch_size)
+  dataLoaders, testLoader = get_data_loaders(args.n_classes, 0.1, args.n_clients, 7, args.batch_size)
   clientLoaders = {clientIDs[i]: dataLoaders[i] for i in range(args.n_clients)}
 
   # make asynchronous code sequence for this simulation
@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
   # process for executing the code sequence generated from code generator
   processes = []
-  p = mp.Process(target=work.code_worker, args=(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi, n_devices*args.n_process_per_gpu))
+  p = mp.Process(target=work.code_worker, args=(code_sequence, clientIDs, workQ, resultQs, n_devices*args.n_process_per_gpu))
   p.start()
   processes.append(p)
 
