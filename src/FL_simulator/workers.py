@@ -79,9 +79,6 @@ def code_generator(clientIDs, duration, n_teachers):
           status[idx] = 'rest'
           train_sequence.append(idx)
           trainStartEnd[idx][-1].append(dur)
-    
-    # -1 means unit time
-    train_sequence.append(-1)
   
   fig = plt.figure()
   for idx in range(n_clients):
@@ -164,8 +161,8 @@ def code_worker(code_sequence, clientIDs, workQ, resultQs, contractAddress, abi,
     workQ.put({'train_method': 'done_training'})
 
 
-def gpu_worker(clientIDs, byzantines, client_models, clientLoaders, testLoader, workQ, resultQs, tx_resultQs, contractAddress, abi, device, batch_size):
-  client_models = {clientID: client_models[clientID].to(device) for clientID in clientIDs}
+def gpu_worker(clientIDs, byzantines, client_models, clientLoaders, testLoader, workQ, resultQs, contractAddress, abi, device, batch_size):
+  client_models = {clientID: client_models[clientID]().to(device) for clientID in clientIDs}
 
   processDone = False
 
