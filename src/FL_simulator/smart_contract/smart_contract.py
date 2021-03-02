@@ -37,8 +37,12 @@ class SmartContract:
 		self.web3.eth.waitForTransactionReceipt(tx_hash)
 
 	def seeTeachersRank(self, teacherIDs):
-		medianPoints = {teacherID: self.contract.functions.seeMedianPoint(
-			self.accounts[teacherID]).call() for teacherID in teacherIDs}
+		medianPoints = {}
+
+		for teacherID in teacherIDs:
+			medianPoint = self.contract.functions.seeMedianPoint(self.accounts[teacherID]).call()
+			if medianPoint != 0:
+				medianPoints[teacherID] = medianPoint
 
 		sortedTeachersList = sorted(
 			medianPoints.keys(), key=lambda teacherID: medianPoints[teacherID])
