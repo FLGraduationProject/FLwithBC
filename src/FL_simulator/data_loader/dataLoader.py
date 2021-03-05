@@ -47,11 +47,13 @@ def get_data_loaders(n_classes, partition, n_clients, classes_per_client, batch_
   
   train_inds, val_inds = split_non_iid(trainset, n_classes, partition, n_clients)
   
-  dataLoaders = [torch.utils.data.DataLoader(torch.utils.data.Subset(trainset, inds), batch_size=batch_size, shuffle=True, drop_last=True) for inds in train_inds]
+  dataLoaders = [torch.utils.data.DataLoader(torch.utils.data.Subset(trainset, inds), batch_size=batch_size, shuffle=True) for inds in train_inds]
+
+  print([len(inds) for inds in train_inds])
 
   referenceLoader = torch.utils.data.DataLoader(torch.utils.data.Subset(trainset, val_inds), batch_size=batch_size, shuffle=True)
 
-  testLoader = torch.utils.data.DataLoader(torch.utils.data.Subset(testset, range(int(len(testset)/4))), batch_size=1, shuffle=False)
+  testLoader = torch.utils.data.DataLoader(testset, batch_size=batch_size*10, shuffle=True)
   print(len(testLoader))
 
   return dataLoaders, referenceLoader, testLoader

@@ -91,7 +91,13 @@ def code_generator(clientIDs, duration, n_teachers):
 
   for clientIdx, clientTrain in enumerate(trainStartEnd):
     for clientTrainEnd in clientTrain:
-      idx_teachers = np.random.permutation(np.delete(np.arange(n_clients), clientIdx))[:n_teachers]
+      # idx_teachers = np.random.permutation(np.delete(np.arange(n_clients), clientIdx))[:n_teachers]
+      idx_teachers = []
+      rank = smartContract.seeTeachersRank(clientIDs)
+      while len(idx_teachers) != 10:
+        idx_teacher = np.random.choice(np.delete(np.arange(n_clients)), weights=[(50-rank[i]) for i in range(n_clients)])
+        if idx_teacher not in idx_teachers:
+          idx_teachers.append(idx_teacher)
       teachers = [clientIDs[idx] for idx in idx_teachers]
       codeStart = {'action': 'start', 'client': clientIDs[clientIdx], 'train_method': 'KD_train', 'teachers': teachers}
       codeEnd = {'action': 'end', 'client': clientIDs[clientIdx]}
@@ -102,18 +108,18 @@ def code_generator(clientIDs, duration, n_teachers):
 
     
 
-def code_worker(durationBlocks, clientIDs, workQs, resultQs, contractAddress, abi, n_gpu_process):
+def code_worker(client_models, testLoader, durationBlocks, clientIDs, workQ, resultQs, contractAddress, abi, n_gpu_process, device):
   smartContract = SmartContract(clientIDs, contractAddress, abi)
 
   model_params = {clientID: None for clientID in clientIDs}
   test_results = {clientID: {'test_result': [], 'time': []} for clientID in clientIDs}
 
-  workQIdx = 0
   print(len(durationBlocks))
 
   for duration, durationBlock in enumerate(durationBlocks):
     print("duration is {}".format(duration))
     for code in durationBlock:
+      print(code)
       if code['action'] == 'start':
         if code['train_method'] == 'KD_train':
           model_data = {
@@ -127,20 +133,24 @@ def code_worker(durationBlocks, clientIDs, workQs, resultQs, contractAddress, ab
           model_data = {
             'main_client': model_params[code['client']],
           }
-
-        workQs[workQIdx].put({'client': code['client'], 'train_method': code['train_method'], 'model_data': model_data})
-        workQIdx = (workQIdx+1)%len(workQs)
+        workQ.put({'client': code['client'], 'train_method': code['train_method'], 'model_data': model_data})
       
       elif code['action'] == 'end':
         while True:
           time.sleep(0.2)
           # get result first
           if not resultQs[code['client']].empty():
+            # torch.cuda.empty_cache()
             msg = resultQs[code['client']].get()
             model_params[code['client']] = msg['updated_params']
-            test_results[code['client']]['test_result'].append(msg['test_result'])
-            test_results[code['client']]['time'].append(duration)
+
             if msg['train_method'] == 'KD_train':
+              client_model = client_models[code['client']]
+              client_model.load_state_dict(model_params[code['client']])
+              test_result = cf.test(client_models[code['client']], testLoader, device)
+              test_results[code['client']]['test_result'].append(test_result)
+              test_results[code['client']]['time'].append(duration)
+
               smartContract.upload_tx(code['client'], msg['uploadData'])
             break
       
@@ -158,13 +168,13 @@ def code_worker(durationBlocks, clientIDs, workQs, resultQs, contractAddress, ab
   plt.close(fig)
   
   for _ in range(n_gpu_process):
-    workQ.put({'train_method': 'done_training'})
-    workQ.put({'train_method': 'done_training'})
+    workQ.put({'train_method': 'done_training', 'client':''})
+    workQ.put({'train_method': 'done_training', 'client':''})
 
 
 def gpu_worker(clientIDs, byzantines, client_models, clientLoaders, referenceLoader, testLoader, workQ, resultQs, contractAddress, abi, device, batch_size):
   print(workQ)
-  client_models = {clientID: client_models[clientID].to(device) for clientID in clientIDs}
+  client_models = {clientID: client_models[clientID] for clientID in clientIDs}
 
   processDone = False
 
@@ -174,25 +184,27 @@ def gpu_worker(clientIDs, byzantines, client_models, clientLoaders, referenceLoa
     time.sleep(0.2)
     if not workQ.empty():
       msg = workQ.get()
+      print("gpu processing {}".format(msg['client']))
       if msg['train_method'] == 'KD_train':
         client_model = client_models[msg['client']]
-        client_model.load_state_dict({k: v.to(device) for k, v in msg['model_data']['main_client'].items()})
-        teacher_models = []
+        client_model.load_state_dict(msg['model_data']['main_client'])
+        teacher_models = {}
         teacherIDs = []
         for teacherID in msg['model_data']['teacher_clients'].keys():
           teacher_model = client_models[teacherID]
-          teacher_model.load_state_dict({k: v.to(device) for k, v in msg['model_data']['teacher_clients'][teacherID].items()})
-          teacher_models.append(teacher_model)
+          teacher_model.load_state_dict(msg['model_data']['teacher_clients'][teacherID])
+          teacher_models[teacherID] = teacher_model
           teacherIDs.append(teacherID)
         byzantine = (msg['client'] in byzantines)
-        updated_params, uploadData, test_result = cf.KD_trainNtest(clientIDs, byzantine, client_model, msg['client'], clientLoaders[msg['client']], referenceLoader, testLoader, teacherIDs, teacher_models, smartContract, device, batch_size)
-        resultQs[msg['client']].put({'train_method': 'KD_train', 'updated_params': updated_params, 'uploadData': uploadData, 'test_result': test_result})
+        updated_params, uploadData = cf.KDTrain(clientIDs, byzantine, client_model, msg['client'], clientLoaders[msg['client']], referenceLoader, teacherIDs, teacher_models, smartContract, device, batch_size)
+        resultQs[msg['client']].put({'train_method': 'KD_train', 'updated_params': updated_params, 'uploadData': uploadData})
 
       elif msg['train_method'] == 'local_train':
         client_model = client_models[msg['client']]
         byzantine = (msg['client'] in byzantines)
-        updated_params, test_result = cf.local_trainNtest(client_model, byzantine, msg['client'], clientLoaders[msg['client']], testLoader, device)
-        resultQs[msg['client']].put({'train_method':'local_train', 'updated_params': updated_params, 'test_result': test_result})
+        updated_params = cf.localTrain(client_model, byzantine, msg['client'], clientLoaders[msg['client']], device)
+        resultQs[msg['client']].put({'train_method':'local_train', 'updated_params': updated_params})
 
       elif msg['train_method'] == 'done_training':
         processDone = True
+      print("gpu processing end {}".format(msg['client']))

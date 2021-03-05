@@ -10,7 +10,9 @@ import time
 from .criterion_KD import criterion_KD
 import test as test
 
-def test(train_type, clientID, client_model, testLoader, device):
+def test(client_model, testLoader, device):
+  print("testing start")
+  client_model.to(device)
   client_model.eval()
 
   # This is for test data
@@ -18,6 +20,8 @@ def test(train_type, clientID, client_model, testLoader, device):
   total = 0
   with torch.no_grad():
     for batch_idx, data in enumerate(testLoader):
+      if (batch_idx > len(testLoader)/10):
+        break
       image, label = data
 
       image = image.to(device)
@@ -28,20 +32,24 @@ def test(train_type, clientID, client_model, testLoader, device):
       _, predicted = output.max(1)
       total += label.size(0)
       correct += predicted.eq(label).sum().item()
+  client_model.to(torch.device('cpu'))
+  print("testing end")
   return 100. * correct / total
 
-def local_trainNtest(client_model, byzantine, clientID, dataLoader, testLoader, device, n_epochs=1):
+def localTrain(client_model, byzantine, clientID, dataLoader, device, n_epochs=1):
+  client_model.to(device)
   client_model.train()
   criterion = nn.CrossEntropyLoss()
   optimizer = torch.optim.SGD(client_model.parameters(), lr=0.01)
 
   for epoch in range(n_epochs):
-    train_loss = 0
-    total = 0
-    correct = 0
 
     for batch_idx, data in enumerate(dataLoader):
+      
       image, label = data
+      if label.size(0) == 1:
+        print("batch_size is 1")
+        break
 
       image = image.to(device)
       label = label.to(device)
@@ -60,12 +68,14 @@ def local_trainNtest(client_model, byzantine, clientID, dataLoader, testLoader, 
       # Weight update
       optimizer.step()
 
-  return {k: v.cpu() for k, v in client_model.state_dict().items()}, test('local train', clientID, client_model, testLoader, device)
+  client_model.to(torch.device('cpu'))
+  torch.cuda.empty_cache()
+  return client_model.state_dict()
 
 
-def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, referenceLoader, testLoader, teacherIDs, teacher_models, smartContract, device, batch_size, n_epochs=2):
-  student = client_model
-  student.train()  # tells student to do training
+def KDTrain(clientIDs, byzantine, client_model, clientID, dataLoader, referenceLoader, teacherIDs, teacher_models, smartContract, device, batch_size, n_epochs=2):
+  client_model.to(device)
+  client_model.train()  # tells student to do training
 
   optimizer = torch.optim.SGD(client_model.parameters(), lr=0.01)
 
@@ -80,23 +90,31 @@ def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, refe
   n_teachers = len(teacherIDs)
   
   teacher_alphas = {teacherID: (n_teachers - teacherRank[teacherID])/n_teachers if teacherID in teacherRank.keys() else 0.1 for teacherID in teacherIDs}
-  for epoch in range(n_epochs):
 
+  for teacher_model in teacher_models.values():
+    teacher_model.to(device)
+    teacher_model.eval()
+
+  for epoch in range(n_epochs):
     for batch_idx, data in enumerate(dataLoader):
+      
       image, label = data
-      nowBatchSize = len(label)
+
+      if label.size(0) == 1:
+        print("batch_size is 1")
+        break
 
       image = image.to(device)
       label = label.to(device)
 
       # randomly select teacher for each batch
-      teacher_idx = np.random.randint(0,len(teacher_models))
+      teacher_idx = np.random.randint(0, n_teachers)
       teacherID = teacherIDs[teacher_idx]
-      teacher = teacher_models[teacher_idx]
+      teacher = teacher_models[teacherID]
       # sets gradient to 0
       optimizer.zero_grad()
       # forward, backward, and opt
-      outputs, teacher_outputs = student(image), teacher(image)
+      outputs, teacher_outputs = client_model(image), teacher(image)
 
       if byzantine:
         label = 9 - label
@@ -114,9 +132,9 @@ def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, refe
       optimizer.step()
   
   # This is for test data
-  student.eval()
-  teacher.eval()
+  client_model.eval()
   for teacherID in teacherIDs:
+    teacher = teacher_models[teacherID]
     with torch.no_grad():
       for batch_idx, data in enumerate(referenceLoader):
         image, label = data
@@ -124,7 +142,7 @@ def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, refe
         image = image.to(device)
         label = label.to(device)
         
-        outputs, teacher_outputs = student(image), teacher(image)
+        outputs, teacher_outputs = client_model(image), teacher(image)
 
         dist = nn.KLDivLoss(reduction='batchmean')(F.log_softmax(outputs / temperature, dim=1), F.softmax(teacher_outputs / temperature, dim=1))
         distSum[teacherID] += dist
@@ -137,4 +155,11 @@ def KD_trainNtest(clientIDs, byzantine, client_model, clientID, dataLoader, refe
   uploadData['teacherIDs'] = teacherIDs
   uploadData['points'] = distPoints
 
-  return {k: v.cpu() for k, v in client_model.state_dict().items()}, uploadData, test('KD train', clientID, client_model, testLoader, device)
+  client_model.to(torch.device('cpu'))
+
+  for teacher_model in teacher_models.values():
+    teacher_model.to(torch.device('cpu'))
+
+  torch.cuda.empty_cache()
+
+  return client_model.state_dict(), uploadData

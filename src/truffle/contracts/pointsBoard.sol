@@ -32,8 +32,7 @@ contract PointsBoard {
                 pointsHeap[teachers[i]].minHeap.data = new address[](maxHeapSize);
                 pointsHeap[teachers[i]].maxHeapSize = maxHeapSize;
             }
-            pointsHeap[teachers[i]].values[senderAddr] = points[i];
-            MedianHeap.insert(pointsHeap[teachers[i]], senderAddr);
+            MedianHeap.insert(pointsHeap[teachers[i]], senderAddr, points[i]);
         }
     }
 
@@ -42,6 +41,38 @@ contract PointsBoard {
             return MedianHeap.get_median(pointsHeap[teacherAddr]);
         } else {
             return 0;
+        }
+    }
+
+    function seeMaxHeap(address teacherAddr) public view returns (address[] memory) {
+        if (heapMade[teacherAddr]) {
+            return pointsHeap[teacherAddr].maxHeap.data;
+        } else {
+            return new address[](1);
+        }
+    }
+    
+    function seeMinHeap(address teacherAddr) public view returns (address[] memory) {
+        if (heapMade[teacherAddr]) {
+            return pointsHeap[teacherAddr].minHeap.data;
+        } else {
+            return new address[](1);
+        }
+    }
+    
+    function seeQueue(address teacherAddr) public view returns (address[] memory) {
+        if (heapMade[teacherAddr]) {
+            address[] memory queue = new address[](maxHeapSize);
+            address addr = pointsHeap[teacherAddr].addrQueue.next[address(0)];
+            uint256 index = 0;
+            while (addr != address(0)){
+                queue[index] = addr;
+                addr = pointsHeap[teacherAddr].addrQueue.next[addr];
+                index ++;
+            }
+            return queue;
+        } else {
+            return new address[](1);
         }
     }
 }

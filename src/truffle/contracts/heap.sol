@@ -4,60 +4,62 @@ pragma solidity >=0.5.1 <0.9.0;
 struct Heap {
     address[] data;
     uint256 size;
+    mapping(address=>uint256) locOnHeap;
 }
 
 library MinHeap {
     function insert(
-        Heap storage idxHeap,
-        address clientAddr,
-        mapping(address=>uint256) storage values,
-        mapping(address=>uint256) storage locOnHeap
+        Heap storage minHeap,
+        address insertAddr,
+        mapping(address=>uint256) storage values
     ) internal {
-        uint256 value = values[clientAddr];
-        idxHeap.size++;
-        uint256 index;
-        for (
-            index = idxHeap.size - 1;
-            index > 0 && value < values[idxHeap.data[index / 2]];
-            index /= 2
-        ) {
-            idxHeap.data[index] = idxHeap.data[index / 2];
-            locOnHeap[idxHeap.data[index / 2]] = 2 * index + 1;
+        uint256 value = values[insertAddr];
+        minHeap.size++;
+        uint256 index = minHeap.size - 1;
+        uint256 parent = (index-1)/2;
+        while (index > 0){
+            if (value < values[minHeap.data[parent]]) {
+                minHeap.data[index] = minHeap.data[parent];
+                minHeap.locOnHeap[minHeap.data[parent]] = index;
+                index = parent;
+                parent = (index-1)/2;
+            } else {
+                break;
+            }
         }
-        idxHeap.data[index] = clientAddr;
-        locOnHeap[clientAddr] = 2 * index + 1;
+        minHeap.data[index] = insertAddr;
+        minHeap.locOnHeap[insertAddr] = index;
     }
 
-    function top(Heap storage idxHeap) internal view returns (address) {
-        return idxHeap.data[0];
+    function top(Heap storage minHeap) internal view returns (address) {
+        return minHeap.data[0];
     }
 
     function remove(
-        Heap storage idxHeap,
-        uint256 removeIdx,
-        mapping(address=>uint256) storage values,
-        mapping(address=>uint256) storage locOnHeap
+        Heap storage minHeap,
+        address removeAddr,
+        mapping(address=>uint256) storage values
     ) internal {
-        // move last element to head
-        address lastAddr = idxHeap.data[idxHeap.size - 1];
+        // get last element and replace with removeAddr
+        address lastAddr = minHeap.data[minHeap.size - 1];
         uint256 lastVal = values[lastAddr];
-        idxHeap.size--;
+        minHeap.size--;
 
-        // move head until both childs are smaller
-        uint256 index = removeIdx;
-        uint256 lChild = 2 * removeIdx + 1;
-        uint256 rChild = 2 * removeIdx + 2;
+        // move from replace place until both childs are smaller
+        uint256 index = minHeap.locOnHeap[removeAddr];
+        uint256 lChild = 2 * index + 1;
+        uint256 rChild = 2 * index + 2;
         uint256 minChild;
-        while (rChild < idxHeap.size) {
-            if (values[idxHeap.data[lChild]] < values[idxHeap.data[rChild]]) {
+        while (rChild < minHeap.size) {
+            if (values[minHeap.data[lChild]] < values[minHeap.data[rChild]]) {
                 minChild = lChild;
             } else {
                 minChild = rChild;
             }
 
-            if (lastVal > values[idxHeap.data[minChild]]) {
-                idxHeap.data[index] = idxHeap.data[minChild];
-                locOnHeap[idxHeap.data[minChild]] = 2 * index + 1;
+            if (lastVal > values[minHeap.data[minChild]]) {
+                minHeap.data[index] = minHeap.data[minChild];
+                minHeap.locOnHeap[minHeap.data[minChild]] = index;
                 index = minChild;
                 lChild = 2 * index + 1;
                 rChild = 2 * index + 2;
@@ -67,72 +69,76 @@ library MinHeap {
         }
 
         // if has only left child
-        if (lChild < idxHeap.size) {
-            if (lastVal > values[idxHeap.data[lChild]]) {
-                idxHeap.data[index] = idxHeap.data[lChild];
-                locOnHeap[idxHeap.data[lChild]] = 2 * index + 1;
+        if (lChild < minHeap.size) {
+            if (lastVal > values[minHeap.data[lChild]]) {
+                minHeap.data[index] = minHeap.data[lChild];
+                minHeap.locOnHeap[minHeap.data[lChild]] = index;
                 index = lChild;
             }
         }
 
         // set last element index in place
-        idxHeap.data[index] = lastAddr;
-        locOnHeap[lastAddr] = 2 * index + 1;
+        minHeap.data[index] = lastAddr;
+        minHeap.locOnHeap[lastAddr] = index;
+        
+        // remove removeAddr
+        delete minHeap.locOnHeap[removeAddr];
     }
 }
 
 library MaxHeap {
     function insert(
-        Heap storage idxHeap,
-        address clientAddr,
-        mapping(address=>uint256) storage values,
-        mapping(address=>uint256) storage locOnHeap
+        Heap storage maxHeap,
+        address insertAddr,
+        mapping(address=>uint256) storage values
     ) internal {
-        uint256 value = values[clientAddr];
-        idxHeap.size++;
-        uint256 index;
-        for (
-            index = idxHeap.size - 1;
-            index > 0 && value > values[idxHeap.data[index / 2]];
-            index /= 2
-        ) {
-            idxHeap.data[index] = idxHeap.data[index / 2];
-            locOnHeap[idxHeap.data[index / 2]] = 2 * index + 2;
+        uint256 value = values[insertAddr];
+        maxHeap.size++;
+        uint256 index = maxHeap.size - 1;
+        uint256 parent = (index-1)/2;
+        while (index > 0){
+            if (value > values[maxHeap.data[parent]]) {
+                maxHeap.data[index] = maxHeap.data[parent];
+                maxHeap.locOnHeap[maxHeap.data[parent]] = index;
+                index = parent;
+                parent = (index-1)/2;
+            } else {
+                break;
+            }
         }
-        idxHeap.data[index] = clientAddr;
-        locOnHeap[clientAddr] = 2 * index + 2;
+        maxHeap.data[index] = insertAddr;
+        maxHeap.locOnHeap[insertAddr] = index;
     }
 
-    function top(Heap storage idxHeap) internal view returns (address) {
-        return idxHeap.data[0];
+    function top(Heap storage maxHeap) internal view returns (address) {
+        return maxHeap.data[0];
     }
 
     function remove(
-        Heap storage idxHeap,
-        uint256 removeIdx,
-        mapping(address=>uint256) storage values,
-        mapping(address=>uint256) storage locOnHeap
+        Heap storage maxHeap,
+        address removeAddr,
+        mapping(address=>uint256) storage values
     ) internal {
-        // move last element to remove index
-        address lastAddr = idxHeap.data[idxHeap.size - 1];
+        // get last element and replace with removeAddr
+        address lastAddr = maxHeap.data[maxHeap.size - 1];
         uint256 lastVal = values[lastAddr];
-        idxHeap.size--;
+        maxHeap.size--;
 
-        // move from remove index until both childs are smaller
-        uint256 index = removeIdx;
-        uint256 lChild = 2 * removeIdx + 1;
-        uint256 rChild = 2 * removeIdx + 2;
+        // move from replace place until both childs are smaller
+        uint256 index = maxHeap.locOnHeap[removeAddr];
+        uint256 lChild = 2 * index + 1;
+        uint256 rChild = 2 * index + 2;
         uint256 maxChild;
-        while (rChild < idxHeap.size) {
-            if (values[idxHeap.data[lChild]] > values[idxHeap.data[rChild]]) {
+        while (rChild < maxHeap.size) {
+            if (values[maxHeap.data[lChild]] > values[maxHeap.data[rChild]]) {
                 maxChild = lChild;
             } else {
                 maxChild = rChild;
             }
 
-            if (lastVal < values[idxHeap.data[maxChild]]) {
-                idxHeap.data[index] = idxHeap.data[maxChild];
-                locOnHeap[idxHeap.data[maxChild]] = 2 * index + 2;
+            if (lastVal < values[maxHeap.data[maxChild]]) {
+                maxHeap.data[index] = maxHeap.data[maxChild];
+                maxHeap.locOnHeap[maxHeap.data[maxChild]] = index;
                 index = maxChild;
                 lChild = 2 * index + 1;
                 rChild = 2 * index + 2;
@@ -142,16 +148,19 @@ library MaxHeap {
         }
 
         // if has only left child
-        if (lChild < idxHeap.size) {
-            if (lastVal < values[idxHeap.data[lChild]]) {
-                idxHeap.data[index] = idxHeap.data[lChild];
-                locOnHeap[idxHeap.data[lChild]] = 2 * index + 2;
+        if (lChild < maxHeap.size) {
+            if (lastVal < values[maxHeap.data[lChild]]) {
+                maxHeap.data[index] = maxHeap.data[lChild];
+                maxHeap.locOnHeap[maxHeap.data[lChild]] = index;
                 index = lChild;
             }
         }
 
         // set last element index in place
-        idxHeap.data[index] = lastAddr;
-        locOnHeap[lastAddr] = 2 * index + 2;
+        maxHeap.data[index] = lastAddr;
+        maxHeap.locOnHeap[lastAddr] = index;
+        
+        // remove removeAddr
+        delete maxHeap.locOnHeap[removeAddr];
     }
 }

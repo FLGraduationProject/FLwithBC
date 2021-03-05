@@ -3,7 +3,7 @@ from web3 import Web3
 import torch
 import numpy as np
 
-ganache_url = "http://172.17.0.2:8545"
+ganache_url = "http://127.0.0.1:8545"
 
 
 def smartContractMaker(clientIDs, maxHeapSize):
@@ -30,6 +30,7 @@ class SmartContract:
 		self.contract = self.web3.eth.contract(address=contractAddress, abi=abi)
 
 	def upload_tx(self, clientID, uploadData):
+		print(uploadData)
 		teacherIDs, points = uploadData['teacherIDs'], uploadData['points']
 		teacherAddrs = [self.accounts[teacherID] for teacherID in teacherIDs]
 		tx_hash = self.contract.functions.upload(
@@ -49,7 +50,7 @@ class SmartContract:
 
 		return {sortedTeachersList[i]: i+1 for i in range(len(sortedTeachersList))}
 
-	def getWholeRank(self):
+	def getTeachersHeap(self):
 		medianPoints = {clientID: self.contract.functions.seeMedianPoint(
 			self.accounts[clientID]).call() for clientID in self.clientIDs}
 

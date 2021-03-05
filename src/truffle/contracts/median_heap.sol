@@ -7,9 +7,8 @@ import "./queue.sol";
 struct MedHeap {
     Heap maxHeap;
     Heap minHeap;
-    // if 2n+1 is minHeap, if 2n+2 is maxHeap
-    // ex) 0: no place on Heap, 1: minHeap[0], 2: maxHeap[0], 3: minHeap[1]
-    mapping(address => uint256) locOnHeap;
+    // ex) 0: not on Heap, 1: maxHeap, 2: minHeap
+    mapping(address => uint256) whichHeap;
     mapping(address => uint256) values;
     Q addrQueue;
     uint256 maxHeapSize;
@@ -20,123 +19,118 @@ library MedianHeap {
     using MaxHeap for uint256;
     using Queue for uint256;
 
-    function remove(MedHeap storage idxHeap, address clientAddr) internal {
-        uint256 rmIdx = idxHeap.locOnHeap[clientAddr];
-        idxHeap.locOnHeap[clientAddr] = 0;
-        
-        if (rmIdx % 2 == 1) {
-            uint256 idx = rmIdx / 2;
-            MinHeap.remove(
-                idxHeap.minHeap,
-                idx,
-                idxHeap.values,
-                idxHeap.locOnHeap
-            );
-        } else {
-            uint256 idx = (rmIdx / 2) - 1;
+    function remove(MedHeap storage medHeap, address clientAddr) internal {
+        uint256 heapLoc = medHeap.whichHeap[clientAddr];
+        if (heapLoc == 1) {
             MaxHeap.remove(
-                idxHeap.maxHeap,
-                idx,
-                idxHeap.values,
-                idxHeap.locOnHeap
+                medHeap.maxHeap,
+                clientAddr,
+                medHeap.values
+            );
+        } else if (heapLoc == 2) {
+            MinHeap.remove(
+                medHeap.minHeap,
+                clientAddr,
+                medHeap.values
             );
         }
         
-        if (idxHeap.maxHeap.size > idxHeap.minHeap.size + 1) {
-            address topAddr = MaxHeap.top(idxHeap.maxHeap);
+        if (medHeap.maxHeap.size > medHeap.minHeap.size + 1) {
+            address topAddr = MaxHeap.top(medHeap.maxHeap);
             MaxHeap.remove(
-                idxHeap.maxHeap,
-                0,
-                idxHeap.values,
-                idxHeap.locOnHeap
+                medHeap.maxHeap,
+                topAddr,
+                medHeap.values
             );
             MinHeap.insert(
-                idxHeap.minHeap,
+                medHeap.minHeap,
                 topAddr,
-                idxHeap.values,
-                idxHeap.locOnHeap
+                medHeap.values
             );
-        } else if (idxHeap.maxHeap.size < idxHeap.minHeap.size) {
-            address topAddr = MinHeap.top(idxHeap.minHeap);
+            medHeap.whichHeap[topAddr] = 2;
+        } else if (medHeap.maxHeap.size < medHeap.minHeap.size) {
+            address topAddr = MinHeap.top(medHeap.minHeap);
             MinHeap.remove(
-                idxHeap.minHeap,
-                0,
-                idxHeap.values,
-                idxHeap.locOnHeap
+                medHeap.minHeap,
+                topAddr,
+                medHeap.values
             );
             MaxHeap.insert(
-                idxHeap.maxHeap,
+                medHeap.maxHeap,
                 topAddr,
-                idxHeap.values,
-                idxHeap.locOnHeap
+                medHeap.values
             );
+            medHeap.whichHeap[topAddr] = 1;
         }
+        delete medHeap.values[clientAddr];
+        delete medHeap.whichHeap[clientAddr];
     }
 
-    function insert(MedHeap storage idxHeap, address clientAddr) internal {
-        if (idxHeap.locOnHeap[clientAddr] != 0) {
-            Queue.remove(idxHeap.addrQueue, clientAddr);
-            remove(idxHeap, clientAddr);
+    function insert(MedHeap storage medHeap, address clientAddr, uint256 value) internal {
+        // if already on heap remove first
+        if (medHeap.whichHeap[clientAddr] != 0) {
+            Queue.remove(medHeap.addrQueue, clientAddr);
+            remove(medHeap, clientAddr);
         }
-        else if (idxHeap.addrQueue.size == idxHeap.maxHeapSize) {
-            address removedAddr = Queue.pop(idxHeap.addrQueue);
-            remove(idxHeap, removedAddr);
+        // if heap is full remove oldest
+        else if (medHeap.addrQueue.size == medHeap.maxHeapSize) {
+            address removedAddr = Queue.oldest(medHeap.addrQueue);
+            Queue.remove(medHeap.addrQueue, removedAddr);
+            remove(medHeap, removedAddr);
         }
         
-        Queue.insert(idxHeap.addrQueue, clientAddr);
-        uint256 value = idxHeap.values[clientAddr];
-        if (idxHeap.maxHeap.size == 0) {
+        Queue.insert(medHeap.addrQueue, clientAddr);
+        medHeap.values[clientAddr] = value;
+        if (medHeap.maxHeap.size == 0) {
             MaxHeap.insert(
-                idxHeap.maxHeap,
+                medHeap.maxHeap,
                 clientAddr,
-                idxHeap.values,
-                idxHeap.locOnHeap
+                medHeap.values
             );
+            medHeap.whichHeap[clientAddr] = 1;
         } else {
-            if (idxHeap.values[MaxHeap.top(idxHeap.maxHeap)] > value) {
+            if (medHeap.values[MaxHeap.top(medHeap.maxHeap)] > value) {
                 MaxHeap.insert(
-                    idxHeap.maxHeap,
+                    medHeap.maxHeap,
                     clientAddr,
-                    idxHeap.values,
-                    idxHeap.locOnHeap
+                    medHeap.values
                 );
+                medHeap.whichHeap[clientAddr] = 1;
             } else {
                 MinHeap.insert(
-                    idxHeap.minHeap,
+                    medHeap.minHeap,
                     clientAddr,
-                    idxHeap.values,
-                    idxHeap.locOnHeap
+                    medHeap.values
                 );
+                medHeap.whichHeap[clientAddr] = 2;
             }
 
-            if (idxHeap.maxHeap.size > idxHeap.minHeap.size + 1) {
-                address topAddr = MaxHeap.top(idxHeap.maxHeap);
+            if (medHeap.maxHeap.size > medHeap.minHeap.size + 1) {
+                address topAddr = MaxHeap.top(medHeap.maxHeap);
                 MaxHeap.remove(
-                    idxHeap.maxHeap,
-                    0,
-                    idxHeap.values,
-                    idxHeap.locOnHeap
+                    medHeap.maxHeap,
+                    topAddr,
+                    medHeap.values
                 );
                 MinHeap.insert(
-                    idxHeap.minHeap,
+                    medHeap.minHeap,
                     topAddr,
-                    idxHeap.values,
-                    idxHeap.locOnHeap
+                    medHeap.values
                 );
-            } else if (idxHeap.maxHeap.size < idxHeap.minHeap.size) {
-                address topAddr = MinHeap.top(idxHeap.minHeap);
+                medHeap.whichHeap[topAddr] = 2;
+            } else if (medHeap.maxHeap.size < medHeap.minHeap.size) {
+                address topAddr = MinHeap.top(medHeap.minHeap);
                 MinHeap.remove(
-                    idxHeap.minHeap,
-                    0,
-                    idxHeap.values,
-                    idxHeap.locOnHeap
+                    medHeap.minHeap,
+                    topAddr,
+                    medHeap.values
                 );
                 MaxHeap.insert(
-                    idxHeap.maxHeap,
+                    medHeap.maxHeap,
                     topAddr,
-                    idxHeap.values,
-                    idxHeap.locOnHeap
+                    medHeap.values
                 );
+                medHeap.whichHeap[topAddr] = 1;
             }
         }
     }
@@ -145,4 +139,3 @@ library MedianHeap {
         return heap.values[MaxHeap.top(heap.maxHeap)];
     }
 }
-
