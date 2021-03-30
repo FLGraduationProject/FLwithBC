@@ -1,5 +1,12 @@
 # ignore data files
 data/
 
-#ignore pycache files
-src/__pycache__/
+# ignore pycache files
+src/FL_simulator/__pycache__/
+src/FL_simulator/client_train/__pycache__/
+src/FL_simulator/data_loader/__pycache__/
+src/FL_simulator/nets/__pycache__/
+src/FL_simulator/smart_contract/__pycache__/
+
+# ignore result files
+result/
