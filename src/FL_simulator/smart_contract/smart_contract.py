@@ -2,11 +2,12 @@ import json
 from web3 import Web3
 import torch
 import numpy as np
+import statistics
 
 ganache_url = "http://127.0.0.1:8545"
 
 
-def smartContractMaker(clientIDs, maxHeapSize):
+def smartContractMaker(clientIDs, maxHeapSize, n_teachers):
 	web3 = Web3(Web3.HTTPProvider(ganache_url))
 	accounts = web3.eth.accounts
 	truffleFile = json.load(
@@ -15,7 +16,7 @@ def smartContractMaker(clientIDs, maxHeapSize):
 	bytecode = truffleFile['bytecode']
 	contract = web3.eth.contract(bytecode=bytecode, abi=abi)
 	tx_hash = contract.constructor(
-		maxHeapSize).transact({'from': accounts[0]})
+		maxHeapSize, n_teachers).transact({'from': accounts[0]})
 	tx_receipt = web3.eth.waitForTransactionReceipt(tx_hash)
 	print("contract made")
 	return tx_receipt.contractAddress, abi
@@ -27,33 +28,29 @@ class SmartContract:
 		self.clientIDs = clientIDs
 		accounts = self.web3.eth.accounts
 		self.accounts = {clientIDs[i]: accounts[i] for i in range(len(clientIDs))}
+		self.accountToID = {self.accounts[clientID]: clientID for clientID in clientIDs}
 		self.contract = self.web3.eth.contract(address=contractAddress, abi=abi)
 
-	def upload_tx(self, clientID, uploadData):
-		print(uploadData)
+	def uploadPoints(self, clientID, uploadData):
 		teacherIDs, points = uploadData['teacherIDs'], uploadData['points']
 		teacherAddrs = [self.accounts[teacherID] for teacherID in teacherIDs]
-		tx_hash = self.contract.functions.upload(
+		tx_hash = self.contract.functions.uploadPoints(
 			teacherAddrs, points).transact({'from': self.accounts[clientID]})
 		self.web3.eth.waitForTransactionReceipt(tx_hash)
 
-	def seeTeachersRank(self, teacherIDs):
-		medianPoints = {}
-
-		for teacherID in teacherIDs:
-			medianPoint = self.contract.functions.seeMedianPoint(self.accounts[teacherID]).call()
-			if medianPoint != 0:
-				medianPoints[teacherID] = medianPoint
-
-		sortedTeachersList = sorted(
-			medianPoints.keys(), key=lambda teacherID: medianPoints[teacherID])
-
-		return {sortedTeachersList[i]: i+1 for i in range(len(sortedTeachersList))}
-
-	def getTeachersHeap(self):
-		medianPoints = {clientID: self.contract.functions.seeMedianPoint(
-			self.accounts[clientID]).call() for clientID in self.clientIDs}
-
-		rankFromTop = sorted(
-			medianPoints.keys(), key=lambda clientID: medianPoints[clientID])
-		return rankFromTop
+	def getTeachersInRank(self, clientID):
+		tx_hash = self.contract.functions.assignTeachers().transact({'from': self.accounts[clientID]})
+		self.web3.eth.waitForTransactionReceipt(tx_hash)
+		
+		teacherAddrs = self.contract.functions.seeTeachers().call({'from': self.accounts[clientID]})
+		teachersPoints = {}
+		print(teacherAddrs)
+		for teacherAddr in teacherAddrs:
+			points = self.contract.functions.seePoints(teacherAddr).call({'from': self.accounts[clientID]})
+			if len(points) == 0:
+				med = 0
+			else:
+				med = statistics.median(points)
+			teachersPoints[self.accountToID[teacherAddr]] = med
+		
+		return sorted(list(teachersPoints.keys()), key=lambda k: teachersPoints[k])

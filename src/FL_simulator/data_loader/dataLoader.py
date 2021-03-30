@@ -53,7 +53,7 @@ def get_data_loaders(n_classes, partition, n_clients, classes_per_client, batch_
 
   referenceLoader = torch.utils.data.DataLoader(torch.utils.data.Subset(trainset, val_inds), batch_size=batch_size, shuffle=True)
 
-  testLoader = torch.utils.data.DataLoader(testset, batch_size=batch_size*10, shuffle=True)
+  testLoader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=True)
   print(len(testLoader))
 
   return dataLoaders, referenceLoader, testLoader
