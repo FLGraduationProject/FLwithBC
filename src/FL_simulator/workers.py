@@ -44,7 +44,6 @@ def sequence_generator(clientIDs, n_rounds, n_procs):
 
     # as clients appear, assign them switching start/end
     # make them into code format
-
     roundBlocks = [[] for _ in range(n_rounds+1)]
 
     local_sequence = np.random.permutation(np.arange(len(clientIDs)))[:n_procs]
@@ -54,7 +53,7 @@ def sequence_generator(clientIDs, n_rounds, n_procs):
     for roundIdx in range(n_rounds):
         train_sequence = np.random.permutation(np.arange(len(clientIDs)))[:n_procs]
         for clientIdx in train_sequence:
-            roundBlocks[roundIdx+1].append({'client': clientIDs[clientIdx], 'train_method': 'KD_train'})
+            roundBlocks[roundIdx].append({'client': clientIDs[clientIdx], 'train_method': 'KD_train'})
     return roundBlocks
 
 
@@ -84,11 +83,18 @@ def main_worker(client_models, roundBlocks, workQs, resultQ, testQ, smartContrac
                         workQ = workQs[msg['trainID']]
                         break
                 teachersInRank = smartContract.getTeachersInRank(code['client'])
-                if round != len(roundBlocks) - 1:
+
+                # if teachers is empty just local train one more time
+                if len(teachersInRank) == 0:
+                    workQ.put({'client': code['client'], 'train_method': 'local_train', 'model_data': model_data})
+                # workQ.put({'client': code['client'], 'train_method': 'local_train', 'model_data': model_data})
+                    
+                elif round != len(roundBlocks) - 1:
                     model_data['teacher_clients'] = {teacherID: client_models[teacherID] for teacherID in teachersInRank}
                     model_data['teachersInRank'] = teachersInRank
                     workQ.put({'client': code['client'], 'train_method': code['train_method'], 'model_data': model_data})
 
+    time.sleep(10)
     for workQ in workQs.values():
         workQ.put({'train_method': 'done_training'})
     testQ.put({'client': 'done_training'})
@@ -121,7 +127,7 @@ def train_worker(trainID, clientIDs, byzantines, clientLoaders, referenceLoader,
                 processDone = True
     print("train process over")
 
-def test_worker(clientIDs, testloader, testQ, device, batch_size):
+def test_worker(clientIDs, testloader, testQ, device, batch_size, args):
     processDone = False
 
     all_acc = {clientID: [] for clientID in clientIDs}
@@ -137,7 +143,11 @@ def test_worker(clientIDs, testloader, testQ, device, batch_size):
             elif msg['client'] == 'done_training':
                 processDone = True
 
+    # file_name = 'R{}_B{}_T{}_main.pkl'.format(args.n_rounds, args.byzantineRatio, args.n_teachers)
+    file_name = 'R{}_B{}_T{}_no_rep.pkl'.format(args.n_rounds, args.byzantineRatio, args.n_teachers)
+
+    # file_name = "noKD.pkl"
     # save all_acc in pickle file
-    with open('test_result.pickle', 'wb') as f:
+    with open(file_name, 'wb') as f:
         pickle.dump(all_acc, f, pickle.HIGHEST_PROTOCOL)
     print("test process over")

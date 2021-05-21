@@ -82,11 +82,11 @@ def KDTrain(client_model, byzantine, dataLoader, referenceLoader, teacher_models
   new_client_model = teacher_models[teachersInRank[0]]
   teacher_models[teachersInRank[0]] = client_model
 
-  teacherRank = {teacherID: i for (i, teacherID) in enumerate(teachersInRank)}
+  # teacherRank = {teacherID: i for (i, teacherID) in enumerate(teachersInRank)}
   
   n_teachers = len(teacherIDs)
   
-  teacher_alphas = {teacherID: sigmoid((n_teachers - teacherRank[teacherID])/n_teachers) if teacherID in teacherRank.keys() else 0.1 for teacherID in teacherIDs}
+  # teacher_alphas = {teacherID: sigmoid((n_teachers - teacherRank[teacherID])/n_teachers) if teacherID in teacherRank.keys() else 0.1 for teacherID in teacherIDs}
 
   new_client_model.to(device)
   new_client_model.train()
@@ -117,7 +117,8 @@ def KDTrain(client_model, byzantine, dataLoader, referenceLoader, teacher_models
         label = 9 - label
         teacher_outputs = -teacher_outputs
 
-      alpha = teacher_alphas[teacherID]
+      # alpha = teacher_alphas[teacherID]
+      alpha = 0.9
       temperature = 3
       if byzantine:
         alpha = 0.5
@@ -128,19 +129,20 @@ def KDTrain(client_model, byzantine, dataLoader, referenceLoader, teacher_models
       optimizer.step()
   
   # This is for evaluating points
-  new_client_model.eval()
+  criterion = nn.CrossEntropyLoss()
   for teacherID in teacherIDs:
     teacher = teacher_models[teacherID]
-    with torch.no_grad():
-      for batch_idx, data in enumerate(referenceLoader):
-        image, label = data
+  with torch.no_grad():
+    for batch_idx, data in enumerate(referenceLoader):
+      image, label = data
 
-        image = image.to(device)
-        label = label.to(device)
-        
-        outputs, teacher_outputs = new_client_model(image), teacher(image)
+      image = image.to(device)
+      label = label.to(device)
 
-        dist = nn.KLDivLoss(reduction='batchmean')(F.log_softmax(outputs / temperature, dim=1), F.softmax(teacher_outputs / temperature, dim=1))
+      for teacherID in teacherIDs:
+        teacher_outputs = teacher_models[teacherID](image)
+        # dist = nn.KLDivLoss(reduction='batchmean')(F.log_softmax(outputs / temperature, dim=1), F.softmax(teacher_outputs / temperature, dim=1))
+        dist = criterion(teacher_outputs, label)
         distSum[teacherID] += dist
 
   # get average distance then send it through contract    

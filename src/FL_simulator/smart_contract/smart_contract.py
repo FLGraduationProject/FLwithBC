@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import statistics
 
-ganache_url = "http://127.0.0.1:8545"
+ganache_url = "http://172.17.0.1:8545"
 
 
 def smartContractMaker(clientIDs, maxHeapSize, n_teachers):
@@ -44,7 +44,6 @@ class SmartContract:
 		
 		teacherAddrs = self.contract.functions.seeTeachers().call({'from': self.accounts[clientID]})
 		teachersPoints = {}
-		print(teacherAddrs)
 		for teacherAddr in teacherAddrs:
 			points = self.contract.functions.seePoints(teacherAddr).call({'from': self.accounts[clientID]})
 			if len(points) == 0:

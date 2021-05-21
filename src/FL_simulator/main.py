@@ -9,6 +9,7 @@ from torchvision import transforms
 import torch.nn as nn
 import numpy as np
 
+
 from nets.nets import *
 from data_loader.dataLoader import get_data_loaders
 from workers import *
@@ -20,16 +21,16 @@ import torch.multiprocessing as mp
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_clients', type=int, default=50, help='')
-parser.add_argument('--n_teachers', type=int, default=4, help='')
+parser.add_argument('--n_teachers', type=int, default=3, help='')
 parser.add_argument('--n_points', type=int, default=5, help='')
 parser.add_argument('--batch_size', type=int, default=64, help='')
 parser.add_argument('--model_type', type=nn.Module, default=VGG_9)
 parser.add_argument('--n_local_epochs', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--n_classes', type=int, default=10)
-parser.add_argument('--n_rounds', type=int, default=100)
+parser.add_argument('--n_rounds', type=int, default=200)
 parser.add_argument('--n_process_per_gpu', type=int, default=5)
-parser.add_argument('--byzantineRatio', type=int, default=0.)
+parser.add_argument('--byzantineRatio', type=float, default=0.)
 
 
 if __name__ == '__main__':
@@ -41,8 +42,8 @@ if __name__ == '__main__':
   n_devices = 1
   
   if torch.cuda.is_available():
-    # n_devices = torch.cuda.device_count()
-    n_devices = 1
+    n_devices = torch.cuda.device_count()
+    # n_devices = 1
 
     devices = [torch.device("cuda:{}".format(i)) for i in range(n_devices)]
     cuda = True
@@ -56,6 +57,8 @@ if __name__ == '__main__':
     print('학습을 진행하는 기기: CPU')
 
   args = parser.parse_args()
+
+  print(args)
 
   # make ids for clients
   clientIDs = ['client-{}'.format(i) for i in range(args.n_clients)]
@@ -92,7 +95,7 @@ if __name__ == '__main__':
     processes.append(p)
     deviceNum = (deviceNum + 1) % n_devices
   
-  p = mp.Process(target=test_worker, args=(clientIDs, testLoader, testQ, devices[0], args.batch_size))
+  p = mp.Process(target=test_worker, args=(clientIDs, testLoader, testQ, devices[0], args.batch_size, args))
   p.start()
   processes.append(p)
 
